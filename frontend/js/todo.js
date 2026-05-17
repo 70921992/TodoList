@@ -445,7 +445,7 @@ class TodoManager {
                 }
                 // 添加日历权限检查
                 const hasPermission = localStorage.getItem('calendar_permission') === 'true';
-                if (!hasPermission) {
+                if (!hasPermission && this.isMobileDevice()) {
                     await window.pywebview.api.check_calendar_permission();
                     localStorage.setItem('calendar_permission', 'true');
                 }

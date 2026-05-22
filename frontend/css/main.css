@@ -194,6 +194,43 @@ body {
     transition: var(--transition);
 }
 
+/* 重置select的所有原生样式以统一Mac和Windows样式 */
+select {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    box-sizing: border-box;
+    padding: var(--spacing-sm) var(--spacing-md);
+    line-height: 1.4;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    background-color: #fff;
+    background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="%23666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>');
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px;
+    cursor: pointer;
+    transition: border-color 0.2s;
+}
+select::-ms-expand {
+    display: none;
+}
+select:hover {
+    border-color: #999;
+}
+select:focus {
+    outline: none;
+    border-color: #4A90E2;
+    box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.15);
+}
+/* 针对 Firefox 的额外调整（Firefox 对 select 的 padding 处理稍不同） */
+@-moz-document url-prefix() {
+    select {
+        padding-top: 8px;
+        padding-bottom: 8px;
+    }
+}
+
 /* 应用容器 */
 .app-container {
     display: flex;

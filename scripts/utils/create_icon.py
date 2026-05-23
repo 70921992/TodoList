@@ -11,37 +11,51 @@ import tempfile
 try:
     from PIL import Image, ImageDraw
 
-    def create_icon():
+    def create_icon(padding_ratio=0.1):
         """创建一个简单的TodoList图标"""
         # 创建256x256的图像
         size = 256
         img = Image.new('RGBA', (size, size), None)
         draw = ImageDraw.Draw(img)
 
-        # 蓝色背景圆角矩形
-        draw.rounded_rectangle([0, 0, size, size],
-                               fill=(0, 123, 255, 255),
-                               radius=int(size * 0.15))
+        # 计算有效绘图区域（留白）
+        pad = int(size * padding_ratio)
+        left, top = pad, pad
+        right, bottom = size - pad, size - pad
+        inner_size = right - left
 
-        # 白色复选框
-        box_size = 128
-        box_x = (size - box_size) // 2
-        box_y = (size - box_size) // 2
-        draw.rounded_rectangle([box_x, box_y, box_x + box_size, box_y + box_size],
-                               fill='white', outline='white',
-                               width=3, radius=int(box_size * 0.15))
+        # 1. 蓝色背景圆角矩形（缩进 pad 像素）
+        draw.rounded_rectangle(
+            [left, top, right, bottom],
+            fill=(0, 123, 255, 255),
+            radius=int(inner_size * 0.15)
+        )
 
-        # 使用圆角线条绘制对勾
-        line_width = 16
+        # 2. 白色复选框（大小调整为内框的一半）
+        box_size = int(inner_size * 0.5)  # 原来为 size * 0.5
+        box_x = left + (inner_size - box_size) // 2
+        box_y = top + (inner_size - box_size) // 2
+        draw.rounded_rectangle(
+            [box_x, box_y, box_x + box_size, box_y + box_size],
+            fill='white', outline='white',
+            width=3, radius=int(box_size * 0.15)
+        )
+
+        # 3. 对勾（坐标重新计算，保持相对位置）
+        line_width = max(8, int(box_size * 0.12))  # 自适应线宽
         color = (0, 123, 255)
 
-        # 第一段：左下到中间（略短一点，留出圆角空间）
-        x1, y1 = box_x + 35, box_y + box_size // 2 + 5
-        x2, y2 = box_x + 55, box_y + box_size - 35
-        draw_line_with_round_caps(draw, x1, y1, x2, y2, line_width, color)
+        # 第一段：左下到中间
+        x1 = box_x + int(box_size * 0.27)
+        y1 = box_y + int(box_size * 0.55)
+        x2 = box_x + int(box_size * 0.43)
+        y2 = box_y + int(box_size * 0.73)
 
         # 第二段：中间到右上
-        x3, y3 = box_x + box_size - 30, box_y + 40
+        x3 = box_x + int(box_size * 0.77)
+        y3 = box_y + int(box_size * 0.35)
+
+        draw_line_with_round_caps(draw, x1, y1, x2, y2, line_width, color)
         draw_line_with_round_caps(draw, x2, y2, x3, y3, line_width, color)
 
         # --- 根据平台保存不同格式的图标 ---

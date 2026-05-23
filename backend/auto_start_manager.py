@@ -639,11 +639,7 @@ WantedBy=default.target
             
             with open(plist_file, 'w', encoding='utf-8') as f:
                 f.write(plist_content)
-            
-            # 加载LaunchAgent
-            import subprocess
-            subprocess.run(['launchctl', 'load', str(plist_file)], check=False)
-            
+
             app_logger.info(f"macOS开机自启动已启用: {plist_file}")
             return True
             
@@ -659,10 +655,6 @@ WantedBy=default.target
             plist_file = launch_agents_dir / f"com.{self.app_name.lower()}.plist"
             
             if plist_file.exists():
-                # 卸载LaunchAgent
-                import subprocess
-                subprocess.run(['launchctl', 'unload', str(plist_file)], check=False)
-                
                 # 删除plist文件
                 plist_file.unlink()
             

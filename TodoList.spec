@@ -107,7 +107,7 @@ if sys.platform == 'darwin':
         coll,                           # 🔥 将整个 COLLECT 文件夹打包进 .app，实现零解压、秒开
         name='TodoList.app',
         icon=icon_file,
-        bundle_identifier='com.yourcompany.todolist',
+        bundle_identifier='com.pywebview.todos.todolist',
         info_plist={
             'CFBundleName': 'TodoList',
             'CFBundleDisplayName': 'TodoList',

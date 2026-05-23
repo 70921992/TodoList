@@ -39,6 +39,18 @@ def run_tkinter_process():
     smart_task.run()
 
 if __name__ == '__main__':
+    if sys.platform == 'darwin':
+        # 强制在主线程预热 TIS API，防止后台线程后续并发调用导致崩溃
+        import ctypes
+        import ctypes.util
+
+        try:
+            # 加载 Carbon 框架并调用一次获取当前输入源
+            carbon = ctypes.cdll.LoadLibrary('/System/Library/Frameworks/Carbon.framework/Carbon')
+            carbon.TISCopyCurrentKeyboardInputSource()
+        except Exception:
+            pass
+
     def start_webview_process():
         global webview_process
         webview_process = Process(target=start.start_app)
@@ -46,8 +58,14 @@ if __name__ == '__main__':
 
     def on_open(icon=None, item=None):
         global webview_process
-        if not webview_process.is_alive():
-            start_webview_process()
+        import threading
+        with threading.Lock():
+            if webview_process is None or not webview_process.is_alive():
+                # 如果存在僵尸进程，先清理
+                if webview_process is not None:
+                    webview_process.terminate()
+                    webview_process.join()
+                start_webview_process()
 
     def on_exit(icon, item):
         icon.stop()
@@ -92,7 +110,9 @@ if __name__ == '__main__':
             icon = Icon('TodoList', image, menu=menu, title='TodoList')
             icon.run()
 
-            webview_process.terminate()
+            # 退出时清理
+            if webview_process and webview_process.is_alive():
+                webview_process.terminate()
 
         # 应用关闭时停止提醒服务
         app_logger.info("停止任务提醒服务...")

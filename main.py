@@ -36,7 +36,6 @@ def force_kill_process_tree():
     """
     import subprocess
     import time
-    import signal
 
     pid = os.getpid()
     app_logger.info(f"准备结束当前进程树，主进程PID: {pid}")
@@ -62,13 +61,14 @@ def force_kill_process_tree():
 
         else:
             # --- Linux 或其他类Unix系统 ---
-            # 优雅终止 (SIGTERM)
-            os.kill(pid, signal.SIGTERM)
-            time.sleep(2)
-            # 强制终止 (SIGKILL)
-            os.kill(pid, signal.SIGKILL)
-            # 强制终止所有子进程
-            subprocess.run(f'pgrep -P {pid} | xargs kill -9', shell=True)
+            # Linux环境利用时延让 GTK 将 DBus 信号安全发出，然后强制杀死所有关联进程
+            import gi
+            gi.require_version('Gtk', '3.0')
+            from gi.repository import Gtk
+            for _ in range(10):
+                while Gtk.events_pending():
+                    Gtk.main_iteration()
+                time.sleep(0.02)
 
     except Exception as e:
         app_logger.error(f"在尝试终止进程树时出错: {e}")
@@ -98,28 +98,40 @@ if __name__ == '__main__':
         except Exception:
             pass
 
-    def on_exit(icon, item):
-        """彻底退出：销毁窗口并停止托盘"""
-        # 1. 停止任务提醒（释放 asyncio、WinRT 线程）
+    def clean_up_resources():
+        """抽取出的公共清理逻辑，确保资源完全释放"""
+        # 1. 停止任务提醒
         try:
             stop_reminder()
-        except Exception:
-            pass
+            app_logger.info("提醒服务已停止")
+        except Exception as e:
+            app_logger.info(f"停止提醒服务异常: {e}")
 
         # 2. 销毁 webview 窗口
         try:
             if backend.globals.window:
                 backend.globals.window.destroy()
-        except Exception:
-            pass
+            app_logger.info("窗口已销毁")
+        except Exception as e:
+            app_logger.info(f"销毁窗口异常: {e}")
 
-        # 3. 停止托盘图标
-        icon.stop()
-
-        # 4. 关闭日志文件（防止占用）
+        # 3. 关闭日志
         logging.shutdown()
 
-        # 5. 强制退出进程（杀死所有残留线程）
+    def on_exit(icon, item):
+        """点击系统托盘菜单的彻底退出"""
+        app_logger.info("开始从托盘菜单执行彻底退出流程...")
+        clean_up_resources()
+
+        # 隐藏并停止托盘
+        try:
+            icon.visible = False
+            icon.stop()
+            app_logger.info("已向 Ubuntu 系统请求隐藏并关闭托盘")
+        except Exception as e:
+            app_logger.info(f"icon stop error: {e}")
+
+        # 强制退出进程（杀死所有残留线程）
         force_kill_process_tree()
 
     try:
@@ -160,6 +172,32 @@ if __name__ == '__main__':
 
             # 主线程运行 WebView（阻塞直到窗口被 destroy）
             start.start_app()
+            app_logger.info("77777: WebView 窗口已关闭（通常是用户点击了窗口的 [X]）")
+
+            # 如果主线程运行到这里，说明主窗口被关闭了，我们需要同步将托盘和进程连带一起关闭
+            app_logger.info("正在清理托盘并彻底退出程序...")
+            clean_up_resources()
+
+            try:
+                icon.visible = False
+                icon.stop()
+            except Exception:
+                pass
+
+            if sys.platform != 'win32' and sys.platform != 'darwin':
+                # 给 Ubuntu 24.04 底层 DBus 通信留出 200 毫秒处理图标注销消息
+                import time
+                import gi
+                gi.require_version('Gtk', '3.0')
+                from gi.repository import Gtk
+
+                for _ in range(10):
+                    while Gtk.events_pending():
+                        Gtk.main_iteration()
+                    time.sleep(0.02)
+
+            app_logger.info("8888: 进程收尾，彻底退出。")
+            os._exit(0)
 
     except ImportError as e:
         print(f"导入错误: {e}")

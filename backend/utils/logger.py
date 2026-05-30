@@ -21,7 +21,9 @@ def get_log_directory():
     if sys.platform == 'win32':
         # Windows: exe 同级目录（用户通常有写权限）
         exe_dir = Path(sys.executable).parent
-        return exe_dir / 'logs'
+        log_dir = exe_dir / 'logs'
+        log_dir.mkdir(parents=True, exist_ok=True)
+        return log_dir
 
     elif sys.platform == 'darwin':
         # macOS: 使用 ~/Library/Logs/TodoList

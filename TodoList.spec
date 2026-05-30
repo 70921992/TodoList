@@ -33,29 +33,41 @@ if data_dir.exists():
 # 平台相关隐藏导入
 extra_hiddenimports = []
 if sys.platform == 'darwin':
-    extra_hiddenimports.append('desktop_notifier.platforms.darwin')
+    extra_hiddenimports.extend([
+        'desktop_notifier.platforms.darwin',
+        'webview.platforms.cocoa' # 显式补充 macOS 原生渲染器
+    ])
 elif sys.platform == 'win32':
     extra_hiddenimports.extend([
         'desktop_notifier.platforms.windows',
         'winsdk.windows.ui.notifications',
         'winsdk.windows.foundation'
     ])
+else:
+    extra_hiddenimports.append('desktop_notifier.platforms.linux')
 
 # 平台相关图标文件
 if sys.platform == 'darwin':
     icon_file = 'todo_icon.icns' if Path('todo_icon.icns').exists() else None
-else:
+elif sys.platform == 'win32':
     icon_file = 'todo_icon.ico' if Path('todo_icon.ico').exists() else None
+else:
+    icon_file = 'todo_icon.png' if Path('todo_icon.png').exists() else None
 
 block_cipher = None
+
+# 自动处理不同平台图标元组导入（Linux 不需要显式塞入 exe 资源段，靠 AppImage 外部注册）
+current_icon_tuple = []
+if icon_file and Path(icon_file).exists():
+    current_icon_tuple = [(icon_file, '.')]
 
 a = Analysis(
     ['main.py'],
     pathex=[str(project_root), str(project_root / 'backend')],
     binaries=[],
-    datas=frontend_files + data_files + ([('todo_icon.ico', '.')] if sys.platform != 'darwin' else [('todo_icon.icns', '.')]),
+    datas=frontend_files + data_files + current_icon_tuple,
     hiddenimports=[
-        'webview', 'webview.platforms', 'webview.platforms.cocoa', # 显式补充 macOS 原生渲染器
+        'webview', 'webview.platforms',
         'Pillow', 'pystray', 'sqlite3', 'json', 'threading', 'datetime',
         'http.server', 'socketserver', 'urllib.parse', 'pathlib', 'os', 'sys',
         'shutil', 'subprocess', 're', 'uuid', 'hashlib', 'base64', 'html',
@@ -76,7 +88,7 @@ a = Analysis(
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
 if sys.platform == 'darwin':
-    # ================= macOS 专属优化：目录模式 (秒开) =================
+    # ================= macOS 专属优化：BUNDLE 模式 =================
     exe = EXE(
         pyz,
         a.scripts,
@@ -120,8 +132,8 @@ if sys.platform == 'darwin':
         }
     )
 
-else:
-    # ================= Windows / Linux：单文件模式 =================
+elif sys.platform == 'win32':
+    # ================= Windows：经典单文件模式 =================
     exe = EXE(
         pyz,
         a.scripts,
@@ -133,9 +145,35 @@ else:
         debug=False,
         bootloader_ignore_signals=False,
         strip=False,
-        upx=True,
+        upx=True,                      # Windows 允许 UPX 压缩
         console=False,
         disable_windowed_traceback=False,
         icon=icon_file,
         version='version_info.txt' if Path('version_info.txt').exists() else None
+    )
+
+else:
+    # ================= Linux 专属优化：目录模式 (为 AppImage 完美铺路) =================
+    exe = EXE(
+        pyz,
+        a.scripts,
+        exclude_binaries=True,         # 🔥 关键：不打进单个二进制，依靠后续 AppImage 机制实现单文件
+        name='TodoList',
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=True,                    # 剔除符号表，深度优化体积
+        upx=False,                     # 🔥 关键：Linux 下 pywebview 用 upx 极易导致核心 WebKit 库崩溃闪退
+        console=False,
+        disable_windowed_traceback=False,
+        icon=icon_file,
+    )
+
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.zipfiles,
+        a.datas,
+        strip=True,
+        upx=False,
+        name='TodoList'                # 生成解离的 dist/TodoList 目录供 AppImage 抓取
     )

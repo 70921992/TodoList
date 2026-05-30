@@ -213,8 +213,18 @@ def create_appimage():
     # 创建标准目录结构
     (appdir / 'usr/bin').mkdir(parents=True)
 
-    # 复制可执行文件
-    shutil.copy('dist/TodoList', appdir / 'usr/bin/TodoList')
+    # 复制可执行文件：兼容 PyInstaller 目录/单文件模式拷贝
+    dist_src = Path('dist/TodoList')
+    if dist_src.is_dir():
+        # 如果是 COLLECT 生成的文件夹，将其内容全量搬运
+        for item in dist_src.iterdir():
+            if item.is_dir():
+                shutil.copytree(item, appdir / 'usr/bin' / item.name)
+            else:
+                shutil.copy2(item, appdir / 'usr/bin')
+    else:
+        # 如果是单文件模式，走原有的单文件拷贝
+        shutil.copy2(dist_src, appdir / 'usr/bin/TodoList')
 
     # 【修改点 1】严格确保 Name 字段、Icon 字段与文件名在大小写上完美统一
     desktop_content = """[Desktop Entry]
@@ -333,7 +343,7 @@ def main():
     # 根据操作系统生成最终安装包
     if sys.platform == 'darwin':
         create_dmg()
-    elif sys.platform == 'linux':
+    elif sys.platform.startswith('linux'):
         if create_appimage():
             # 【针对 Ubuntu 24.04 GNOME 的自动化集成】
             print("💡 正在为当前系统注册桌面图标...")

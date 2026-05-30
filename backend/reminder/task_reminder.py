@@ -140,11 +140,11 @@ class TaskReminder:
         # 专门负责运行 asyncio 循环的线程
         import asyncio
         asyncio.set_event_loop(self.loop)
-        from desktop_notifier import DesktopNotifier
+        from desktop_notifier import DesktopNotifier, Icon
 
         self.notifier = DesktopNotifier(
             app_name="TodoList",
-            app_icon=utils.get_app_icon(),
+            app_icon=Icon(utils.get_app_icon()),
             notification_limit=5,
         )
         self.loop.run_forever()

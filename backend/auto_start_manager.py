@@ -30,8 +30,11 @@ class AutoStartManager:
         """获取应用可执行文件路径"""
         try:
             if getattr(sys, 'frozen', False):
-                # 打包后的可执行文件
-                app_path = sys.executable
+                # Linux：优先获取真正的 AppImage 磁盘文件路径，防止指向临时挂载目录 ---
+                app_path = os.environ.get('APPIMAGE')
+                if not app_path:
+                    # 如果不是通过 AppImage 启动，则回退使用默认的 PyInstaller 路径
+                    app_path = sys.executable
                 app_logger.debug(f"获取到打包后的可执行文件路径: {app_path}")
                 return app_path
             else:

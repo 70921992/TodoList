@@ -156,6 +156,9 @@ def start_app():
         # 保存全局变量，以便在 finally 中能够正常关闭
         window.user_data = {'sync_manager': sync_manager}
 
+        from backend.keyboard.smart_task import SmartTaskInput
+        SmartTaskInput(webview)
+
     app_logger.info("启动webview...")
     # 移动端是必须开启SSL，而桌面端如MacOS系统则不建议开启，避免warning
     ssl_enable = sys.platform != 'darwin'

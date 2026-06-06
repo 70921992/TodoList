@@ -95,14 +95,6 @@ class App {
             });
         }
 
-        // 非Windows系统隐藏部分功能
-        const isWin = (Utils.detectOS() == 'Windows');
-        if (!isWin) {
-            document.querySelectorAll('.only-windows').forEach(item => {
-                item.style.setProperty('display', 'none', 'important');
-            });
-        }
-
         // 窗口大小变化
         window.addEventListener('resize', Utils.debounce(() => {
             this.handleResize();

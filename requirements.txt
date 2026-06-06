@@ -10,3 +10,4 @@ desktop-notifier<=6.2.0  # 用于跨平台桌面通知
 pynput>=1.8.1 # 用于桌面端快捷键
 cryptography>=46.0.1 # 可选：仅开启SSL功能时需要
 pygobject<=3.42.2 # 可选：Linux环境系统托盘功能需要
+quickmachotkey>=2025.7.28

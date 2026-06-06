@@ -33,12 +33,6 @@ if str(code_backend_dir) not in sys.path:
 # 4. 切换到可写的工作目录
 os.chdir(str(data_dir))
 
-def run_tkinter_process():
-    if sys.platform != 'darwin':
-        from backend.keyboard.smart_task import SmartTaskInput
-        smart_task = SmartTaskInput()
-        smart_task.run()
-
 def force_kill_process_tree():
     """
     跨平台强制结束当前进程及其所有子进程。
@@ -161,13 +155,6 @@ if __name__ == '__main__':
             from PIL import Image
             from pystray import Icon, Menu, MenuItem
             from backend.utils import utils
-
-            # 快捷键进程（仅 Windows）
-            if sys.platform == 'win32':
-                import multiprocessing
-                multiprocessing.freeze_support()
-                tk_process = multiprocessing.Process(target=run_tkinter_process, daemon=True)
-                tk_process.start()
 
             # 启动任务提醒服务
             app_logger.info("启动任务提醒服务...")

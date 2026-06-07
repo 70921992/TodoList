@@ -30,36 +30,54 @@ if data_dir.exists():
             rel_path = item.relative_to(project_root).parent
             data_files.append((str(item), str(rel_path)))
 
-# 平台相关隐藏导入
-extra_hiddenimports = []
+# ================= 平台相关配置 =================
+# 1. 平台特定隐藏导入（保留你原有的第三方库）
+# 2. 策略模块隐藏导入（确保动态导入的模块被打包）
+# 3. 需要排除的其他平台策略模块（实现物理隔离）
 if sys.platform == 'darwin':
-    extra_hiddenimports.extend([
+    # macOS 平台
+    extra_hiddenimports = [
         'desktop_notifier.platforms.darwin',
-        'webview.platforms.cocoa' # 显式补充 macOS 原生渲染器
-    ])
-elif sys.platform == 'win32':
-    extra_hiddenimports.extend([
-        'desktop_notifier.platforms.windows',
-        'winsdk.windows.ui.notifications',
-        'winsdk.windows.foundation'
-    ])
-else:
-    extra_hiddenimports.append('desktop_notifier.platforms.linux')
-
-# 平台相关图标文件
-if sys.platform == 'darwin':
+        'webview.platforms.cocoa',
+        'strategies.macos_strategy',           # macOS 策略模块
+    ]
+    exclude_modules = [
+        'strategies.windows_strategy',
+        'strategies.linux_strategy',
+        # 若有其他平台专属的大库也可加在这里，例如 'winsdk'
+    ]
     icon_file = 'todo_icon.icns' if Path('todo_icon.icns').exists() else None
 elif sys.platform == 'win32':
+    # Windows 平台
+    extra_hiddenimports = [
+        'desktop_notifier.platforms.windows',
+        'winsdk.windows.ui.notifications',
+        'winsdk.windows.foundation',
+        'strategies.windows_strategy',         # Windows 策略模块
+    ]
+    exclude_modules = [
+        'strategies.macos_strategy',
+        'strategies.linux_strategy',
+    ]
     icon_file = 'todo_icon.ico' if Path('todo_icon.ico').exists() else None
-else:
+else:  # Linux
+    extra_hiddenimports = [
+        'desktop_notifier.platforms.linux',
+        'strategies.linux_strategy',           # Linux 策略模块
+    ]
+    exclude_modules = [
+        'strategies.windows_strategy',
+        'strategies.macos_strategy',
+    ]
     icon_file = 'todo_icon.png' if Path('todo_icon.png').exists() else None
 
-block_cipher = None
-
-# 自动处理不同平台图标元组导入（Linux 不需要显式塞入 exe 资源段，靠 AppImage 外部注册）
+# 自动处理图标元组（用于 datas）
 current_icon_tuple = []
 if icon_file and Path(icon_file).exists():
     current_icon_tuple = [(icon_file, '.')]
+
+# ================= 核心 Analysis =================
+block_cipher = None
 
 a = Analysis(
     ['main.py'],
@@ -67,18 +85,25 @@ a = Analysis(
     binaries=[],
     datas=frontend_files + data_files + current_icon_tuple,
     hiddenimports=[
-        'webview', 'webview.platforms',
-        'Pillow', 'pystray', 'sqlite3', 'json', 'threading', 'datetime',
-        'http.server', 'socketserver', 'urllib.parse', 'pathlib', 'os', 'sys',
-        'shutil', 'subprocess', 're', 'uuid', 'hashlib', 'base64', 'html',
-        'webbrowser', 'tkinter', 'desktop_notifier.resources', 'desktop_notifier.main',
-        'tkinter.messagebox', 'tkinter.filedialog', 'tkinter.simpledialog',
-        'database.operations', 'database.models', 'api.todo_api', 'utils.logger', 'utils.task_reminder'
-    ] + extra_hiddenimports,
+        # --- 只保留必要的第三方库和项目模块，标准库已删除 ---
+        'webview',
+        'Pillow',
+        'pystray',
+        'desktop_notifier.resources',
+        'desktop_notifier.main',
+        'database.operations',
+        'database.models',
+        'api.todo_api',
+        'utils.logger',
+        'utils.task_reminder',
+    ] + extra_hiddenimports,   # 平台特定 + 策略模块
+    excludes=[
+        'matplotlib', 'numpy', 'scipy', 'pandas', 'cv2',
+        'PyQt6', 'PyQt5', 'PySide2', 'PySide6',
+    ] + exclude_modules,        # 排除其他平台的策略模块
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['matplotlib', 'numpy', 'scipy', 'pandas', 'cv2', 'PyQt6', 'PyQt5', 'PySide2', 'PySide6'], # 排除所有冗余 UI 库
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
@@ -87,6 +112,7 @@ a = Analysis(
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
+# ================= 平台打包输出 =================
 if sys.platform == 'darwin':
     # ================= macOS 专属优化：BUNDLE 模式 =================
     exe = EXE(
@@ -120,6 +146,7 @@ if sys.platform == 'darwin':
         name='TodoList.app',
         icon=icon_file,
         bundle_identifier='com.pywebview.todos.todolist',
+        strip=True,               # 🔥 剥离调试符号，减小 .app 体积
         info_plist={
             'CFBundleName': 'TodoList',
             'CFBundleDisplayName': 'TodoList',

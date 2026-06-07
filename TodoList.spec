@@ -39,12 +39,11 @@ if sys.platform == 'darwin':
     extra_hiddenimports = [
         'desktop_notifier.platforms.darwin',
         'webview.platforms.cocoa',
-        'strategies.macos_strategy',           # macOS 策略模块
+        'backend.platforms.impl.mac_impl',
     ]
-    exclude_modules = [
-        'strategies.windows_strategy',
-        'strategies.linux_strategy',
-        # 若有其他平台专属的大库也可加在这里，例如 'winsdk'
+    extra_exclude_modules = [
+        'backend.platforms.impl.win_impl',
+        'backend.platforms.impl.linux_impl',
     ]
     icon_file = 'todo_icon.icns' if Path('todo_icon.icns').exists() else None
 elif sys.platform == 'win32':
@@ -53,23 +52,64 @@ elif sys.platform == 'win32':
         'desktop_notifier.platforms.windows',
         'winsdk.windows.ui.notifications',
         'winsdk.windows.foundation',
-        'strategies.windows_strategy',         # Windows 策略模块
+        'backend.platforms.impl.win_impl',
     ]
-    exclude_modules = [
-        'strategies.macos_strategy',
-        'strategies.linux_strategy',
+    extra_exclude_modules = [
+        'backend.platforms.impl.mac_impl',
+        'backend.platforms.impl.linux_impl',
     ]
     icon_file = 'todo_icon.ico' if Path('todo_icon.ico').exists() else None
 else:  # Linux
     extra_hiddenimports = [
         'desktop_notifier.platforms.linux',
-        'strategies.linux_strategy',           # Linux 策略模块
+        'backend.platforms.impl.linux_impl',
     ]
-    exclude_modules = [
-        'strategies.windows_strategy',
-        'strategies.macos_strategy',
+    extra_exclude_modules = [
+        'backend.platforms.impl.mac_impl',
+        'backend.platforms.impl.win_impl',
     ]
     icon_file = 'todo_icon.png' if Path('todo_icon.png').exists() else None
+
+# 这里只放完全跨平台的、公共的、且因为动态加载可能漏掉的模块
+base_hiddenimports = [
+    'webview',
+    'Pillow',
+    'pystray',
+    'desktop_notifier.resources',
+    'desktop_notifier.main',
+    'backend.database.operations',
+    'backend.database.models',
+    'backend.api.todo_api',
+    'backend.utils.logger',
+    'backend.utils.utils',
+    'backend.keyboard.smart_task',
+    'backend.p2p.data_manager',
+    'backend.p2p.firewall_manager',
+    'backend.p2p.p2p_client',
+    'backend.p2p.p2p_server',
+    'backend.platforms.core_factory',
+    'backend.platforms.interface.service',
+    'backend.reminder.task_reminder',
+    'backend.reminder.calendar_manager',
+    'backend.webdav.data_sync',
+    'backend.webdav.webdav_client',
+]
+
+base_exclude_modules = [
+    'matplotlib',
+    'numpy',
+    'scipy',
+    'pandas',
+    'cv2',
+    'PyQt6',
+    'PyQt5',
+    'PySide2',
+    'PySide6',
+]
+
+# 🌟 核心：将公共依赖与当前平台的特有依赖合并；将公共移除的模块与当前平台特定移除的模块合并
+final_hiddenimports = base_hiddenimports + extra_hiddenimports
+final_exclude_modules = base_exclude_modules + extra_exclude_modules
 
 # 自动处理图标元组（用于 datas）
 current_icon_tuple = []
@@ -81,26 +121,11 @@ block_cipher = None
 
 a = Analysis(
     ['main.py'],
-    pathex=[str(project_root), str(project_root / 'backend')],
+    pathex=[str(project_root)],
     binaries=[],
     datas=frontend_files + data_files + current_icon_tuple,
-    hiddenimports=[
-        # --- 只保留必要的第三方库和项目模块，标准库已删除 ---
-        'webview',
-        'Pillow',
-        'pystray',
-        'desktop_notifier.resources',
-        'desktop_notifier.main',
-        'database.operations',
-        'database.models',
-        'api.todo_api',
-        'utils.logger',
-        'utils.task_reminder',
-    ] + extra_hiddenimports,   # 平台特定 + 策略模块
-    excludes=[
-        'matplotlib', 'numpy', 'scipy', 'pandas', 'cv2',
-        'PyQt6', 'PyQt5', 'PySide2', 'PySide6',
-    ] + exclude_modules,        # 排除其他平台的策略模块
+    hiddenimports=final_hiddenimports,  # 🌟 确保这里传入的是合并后的完整列表，且名字没有写错！
+    excludes=final_exclude_modules,           # 🌟 确保这里精准排除了非本平台的模块
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -108,6 +133,7 @@ a = Analysis(
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
+    optimize=0,
 )
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)

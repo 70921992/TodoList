@@ -42,5 +42,9 @@ class WindowsService(PlatformService):
         """获取是否开启ssl的统一接口"""
         return True
 
+    def is_default_hide(self):
+        """获取是否隐藏快捷键窗口的统一接口"""
+        return True
+
 # 用于给工厂注册的导出变量
 ExportService = WindowsService

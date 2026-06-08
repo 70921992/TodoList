@@ -167,5 +167,9 @@ class MacService(PlatformService):
         # MacOS端开启后存在不影响使用的warning
         return False
 
+    def is_default_hide(self):
+        """获取是否隐藏快捷键窗口的统一接口"""
+        return True
+
 # 用于给工厂注册的导出变量
 ExportService = MacService

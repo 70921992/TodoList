@@ -26,3 +26,8 @@ class PlatformService(ABC):
     def is_ssl_enable(self):
         """获取是否开启ssl的统一接口"""
         pass
+
+    @abstractmethod
+    def is_default_hide(self):
+        """获取是否隐藏快捷键窗口的统一接口"""
+        pass

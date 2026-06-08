@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta
 import re
-import sys
 
 from backend.database.operations import TodoDatabase
 
@@ -14,7 +13,7 @@ default_warning = '💡 输入任务内容... 使用 #标签 *分类 @时间'
 class SmartTaskInput:
     def __init__(self, webview=None):
         self.window = None
-        self.is_hide = not sys.platform.startswith('linux')
+        self.is_hide = True
         self.value = None
         self.input_element = None
         self.db = TodoDatabase()
@@ -125,6 +124,10 @@ class SmartTaskInput:
         </body>
         </html>
         """
+
+        from backend.platforms.core.factory import get_platform_service
+        service = get_platform_service()
+        self.is_hide = service.is_default_hide()
 
         self.window = webview.create_window(
             'TodoList',

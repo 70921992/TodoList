@@ -21,3 +21,8 @@ class PlatformService(ABC):
     def get_app_icon(self, base_path):
         """获取应用图标的统一接口"""
         pass
+
+    @abstractmethod
+    def is_ssl_enable(self):
+        """获取是否开启ssl的统一接口"""
+        pass

@@ -160,9 +160,10 @@ def start_app():
         SmartTaskInput(webview)
 
     app_logger.info("启动webview...")
-    # 移动端是必须开启SSL，而桌面端如MacOS系统则不建议开启，避免warning
-    ssl_enable = sys.platform != 'darwin'
     try:
+        from backend.platforms.core.factory import get_platform_service
+        service = get_platform_service()
+        ssl_enable = service.is_ssl_enable()
         # 将 lazy_initialize 函数作为第一个参数传入
         # pywebview 启动窗口后会立即在后台启动一个线程执行此函数，解决Linux端窗口卡死问题
         webview.start(lazy_initialize, backend.globals.window,

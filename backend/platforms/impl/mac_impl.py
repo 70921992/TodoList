@@ -162,5 +162,10 @@ class MacService(PlatformService):
         """获取应用图标的统一接口"""
         return base_path / 'todo_icon.icns'
 
+    def is_ssl_enable(self):
+        """获取是否开启ssl的统一接口"""
+        # MacOS端开启后存在不影响使用的warning
+        return False
+
 # 用于给工厂注册的导出变量
 ExportService = MacService

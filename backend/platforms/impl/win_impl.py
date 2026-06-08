@@ -38,5 +38,9 @@ class WindowsService(PlatformService):
         """获取应用图标的统一接口"""
         return base_path / 'todo_icon.ico'
 
+    def is_ssl_enable(self):
+        """获取是否开启ssl的统一接口"""
+        return True
+
 # 用于给工厂注册的导出变量
 ExportService = WindowsService

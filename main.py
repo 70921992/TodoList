@@ -38,42 +38,13 @@ def force_kill_process_tree():
     跨平台强制结束当前进程及其所有子进程。
     优先尝试优雅终止，超时后强制结束。
     """
-    import subprocess
-    import time
-
     pid = os.getpid()
     app_logger.info(f"准备结束当前进程树，主进程PID: {pid}")
 
     try:
-        if sys.platform == 'win32':
-            # --- Windows ---
-            # 优雅终止 (SIGTERM)
-            subprocess.run(f'taskkill /PID {pid} /T', shell=True)
-            time.sleep(2)
-            # 强制终止 (SIGKILL)
-            subprocess.run(f'taskkill /F /T /PID {pid}', shell=True, capture_output=True)
-
-        elif sys.platform == 'darwin':
-            # --- macOS ---
-            # 优雅终止 (SIGTERM)
-            subprocess.run(['kill', '-TERM', str(pid)])
-            time.sleep(2)
-            # 强制终止 (SIGKILL)
-            subprocess.run(['kill', '-KILL', str(pid)])
-            # 强制终止所有子进程，使用 pgrep -P 查找并传递给 kill -9[reference:5]
-            subprocess.run(f'pgrep -P {pid} | xargs kill -9', shell=True)
-
-        else:
-            # --- Linux 或其他类Unix系统 ---
-            # Linux环境利用时延让 GTK 将 DBus 信号安全发出，然后强制杀死所有关联进程
-            import gi
-            gi.require_version('Gtk', '3.0')
-            from gi.repository import Gtk
-            for _ in range(10):
-                while Gtk.events_pending():
-                    Gtk.main_iteration()
-                time.sleep(0.02)
-
+        from backend.platforms.core.factory import get_platform_service
+        service = get_platform_service()
+        service.force_kill_process_tree(pid)
     except Exception as e:
         app_logger.error(f"在尝试终止进程树时出错: {e}")
 

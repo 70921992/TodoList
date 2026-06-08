@@ -137,5 +137,17 @@ class MacService(PlatformService):
         except Exception as e:
             print(f"快捷键注册失败: {e}")
 
+    def force_kill_process_tree(self, pid):
+        """强制结束当前进程及其所有子进程的统一接口"""
+        import subprocess
+        import time
+        # 优雅终止 (SIGTERM)
+        subprocess.run(['kill', '-TERM', str(pid)])
+        time.sleep(2)
+        # 强制终止 (SIGKILL)
+        subprocess.run(['kill', '-KILL', str(pid)])
+        # 强制终止所有子进程，使用 pgrep -P 查找并传递给 kill -9[reference:5]
+        subprocess.run(f'pgrep -P {pid} | xargs kill -9', shell=True)
+
 # 用于给工厂注册的导出变量
 ExportService = MacService

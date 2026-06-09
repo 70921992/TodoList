@@ -7,7 +7,6 @@ import json
 import shutil
 from pathlib import Path
 import sys
-from backend.database.operations import get_app_data_dir
 
 # 添加backend目录到Python路径
 current_dir = Path(__file__).parent

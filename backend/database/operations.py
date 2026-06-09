@@ -24,64 +24,6 @@ def get_app_data_file():
         project_root = Path(__file__).parent.parent.parent
         return project_root / 'data' / 'todo.db'
 
-
-def get_app_data_dir():
-    """获取应用数据目录
-    
-    优先级：
-    1. 用户配置的数据目录（来自外部配置）
-    2. 系统默认的应用数据目录
-    """
-    # 首先尝试获取用户配置的数据目录（使用外部配置管理器）
-    try:
-        from backend.config_manager import get_data_directory
-        user_data_dir = get_data_directory()
-        if user_data_dir:
-            base_dir = Path(user_data_dir)
-            os.makedirs(base_dir, exist_ok=True)
-            return base_dir
-    except ImportError:
-        pass
-    except Exception as e:
-        print(f"警告：无法获取用户配置的数据目录: {e}")
-    
-    # 回退到系统默认目录
-    # 首先检查是否为安卓环境
-    is_android = hasattr(sys, 'getandroidapilevel') or 'ANDROID_ARGUMENT' in os.environ
-
-    if is_android:
-        # 安卓系统
-        try:
-            # 尝试使用安卓特定的API获取应用私有目录
-            from android.storage import app_storage_path
-            base_dir = Path(app_storage_path()) / 'TodoList'
-        except ImportError:
-            # 备选方案：使用标准的安卓应用数据目录
-            if 'ANDROID_DATA' in os.environ:
-                base_dir = Path(ANDROID_PRIMARY_DATA_DIR)
-            else:
-                # 安卓模拟器或其他情况
-                base_dir = Path('/storage/emulated/0/Android/data') / ANDROID_PACKAGE_NAME
-    elif os.name == 'nt':  # Windows
-        base_dir = Path(os.environ['APPDATA']) / 'TodoList'
-    elif os.name == 'posix':  # macOS/Linux
-        # 进一步细分Linux和macOS
-        if sys.platform == 'darwin':  # macOS
-            base_dir = Path.home() / 'Library' / 'Application Support' / 'TodoList'
-        else:  # Linux和其他类Unix系统
-            # 优先使用XDG标准
-            xdg_data_home = os.environ.get('XDG_DATA_HOME')
-            if xdg_data_home:
-                base_dir = Path(xdg_data_home) / 'TodoList'
-            else:
-                base_dir = Path.home() / '.local' / 'share' / 'TodoList'
-    else:
-        base_dir = Path(__file__).parent.parent.parent / 'data'
-
-    os.makedirs(base_dir, exist_ok=True)
-    return base_dir
-
-
 def _migrate_database(cursor):
     """数据库迁移，添加新字段"""
     # 获取现有表结构

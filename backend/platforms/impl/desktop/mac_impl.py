@@ -1,8 +1,96 @@
 # impl/desktop/mac_impl.py
 
 import sys
+from pathlib import Path
+from typing import Dict, Any
+from backend.config_manager import get_config_manager
 from backend.platforms.interface.service import PlatformService
 from typing import Tuple, Optional
+
+def enable_macos_auto_start(app_name) -> bool:
+    """macOS平台启用自启动"""
+    from backend.utils import utils
+    app_path = utils.get_app_path()
+    try:
+        # LaunchAgents目录
+        launch_agents_dir = Path.home() / 'Library' / 'LaunchAgents'
+        launch_agents_dir.mkdir(parents=True, exist_ok=True)
+
+        # plist文件路径
+        plist_file = launch_agents_dir / f"com.{app_name.lower()}.plist"
+
+        # 日志目录
+        log_dir = Path.home() / '.local' / 'var' / 'log'
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # 直接启动应用
+        # plist文件内容
+        plist_content = f"""<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+<key>Label</key>
+<string>com.{app_name.lower()}</string>
+<key>ProgramArguments</key>
+<array>
+    <string>{sys.executable}</string>
+    <string>{app_path}</string>
+</array>
+<key>RunAtLoad</key>
+<true/>
+<key>KeepAlive</key>
+<false/>
+<key>StandardOutPath</key>
+<string>{log_dir}/{app_name}.out.log</string>
+<key>StandardErrorPath</key>
+<string>{log_dir}/{app_name}.err.log</string>
+<key>EnvironmentVariables</key>
+<dict>
+    <key>PATH</key>
+    <string>/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin</string>
+</dict>
+<key>WorkingDirectory</key>
+<string>{Path(app_path).parent}</string>
+<key>StartInterval</key>
+<integer>0</integer>
+<key>LaunchOnlyOnce</key>
+<true/>
+</dict>
+</plist>
+"""
+
+        with open(plist_file, 'w', encoding='utf-8') as f:
+            f.write(plist_content)
+
+        print(f"macOS开机自启动已启用: {plist_file}")
+        return True
+
+    except Exception as e:
+        print(f"macOS启用自启动失败: {e}")
+        return False
+
+def disable_macos_auto_start(app_name) -> bool:
+    """macOS平台禁用自启动"""
+    try:
+        # LaunchAgents目录
+        launch_agents_dir = Path.home() / 'Library' / 'LaunchAgents'
+        plist_file = launch_agents_dir / f"com.{app_name.lower()}.plist"
+
+        if plist_file.exists():
+            # 删除plist文件
+            plist_file.unlink()
+
+        # 删除启动脚本
+        script_file = Path.home() / '.local' / 'bin' / f"{app_name}_start.sh"
+        if script_file.exists():
+            script_file.unlink()
+
+        print("macOS开机自启动已禁用")
+        return True
+
+    except Exception as e:
+        print(f"macOS禁用自启动失败: {e}")
+        return False
 
 class MacService(PlatformService):
     def shortcut_handler(self, shortcut, handler):
@@ -151,7 +239,6 @@ class MacService(PlatformService):
 
     def get_log_directory(self):
         """返回可写的日志目录的统一接口"""
-        from pathlib import Path
         # macOS: 使用 ~/Library/Logs/TodoList
         home = Path.home()
         log_dir = home / 'Library' / 'Logs' / 'TodoList'
@@ -227,6 +314,35 @@ class MacService(PlatformService):
     def remove_firewall_rule(self, port):
         """移除防火墙策略规则的统一接口"""
         return True, "非Windows系统，无需操作防火墙"
+
+    def get_auto_start_status(self) -> Dict[str, Any]:
+        """获取自启动状态信息"""
+        return {
+            'enabled': get_config_manager().get('auto_start_enabled', False),
+            'platform': 'darwin',
+            'supported': True
+        }
+
+    def set_auto_start_enabled(self, enabled):
+        print(f"设置开机自启动状态: {enabled}")
+        try:
+            # 保存配置
+            success = get_config_manager().set('auto_start_enabled', enabled)
+            if not success:
+                print("保存自启动配置失败")
+                return False
+
+            app_name = "TodoList"
+
+            # 根据状态设置或取消自启动
+            if enabled:
+                return enable_macos_auto_start(app_name)
+            else:
+                return disable_macos_auto_start(app_name)
+
+        except Exception as e:
+            print(f"设置开机自启动失败: {e}")
+            return False
 
 # 用于给工厂注册的导出变量
 ExportService = MacService

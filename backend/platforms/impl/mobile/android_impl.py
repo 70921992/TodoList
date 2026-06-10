@@ -71,5 +71,17 @@ class AndroidService(PlatformService):
         """移除防火墙策略规则的统一接口"""
         return True, "非Windows系统，无需操作防火墙"
 
+    def get_auto_start_status(self):
+        """获取自动重启开关状态的统一接口"""
+        return {
+            'enabled': False,
+            'platform': 'android',
+            'supported': False
+        }
+
+    def set_auto_start_enabled(self, enabled):
+        """设置自动重启开关状态的统一接口"""
+        return False
+
 # 用于给工厂注册的导出变量
 ExportService = AndroidService

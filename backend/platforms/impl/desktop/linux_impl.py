@@ -1,5 +1,65 @@
 # impl/desktop/linux_impl.py
+import os
+from typing import Dict, Any
+from pathlib import Path
+from backend.config_manager import get_config_manager
 from backend.platforms.interface.service import PlatformService
+
+def enable_linux_auto_start(app_name) -> bool:
+    """Linux平台启用自启动"""
+    from backend.utils import utils
+    try:
+        # 使用传统的 autostart 方式
+        # 获取autostart目录
+        autostart_dir = Path.home() / '.config' / 'autostart'
+        autostart_dir.mkdir(parents=True, exist_ok=True)
+
+        # 创建.desktop文件
+        desktop_file = autostart_dir / f"{app_name}.desktop"
+
+        # 启动命令
+        launch_cmd = utils.get_launch_command()
+
+        # 桌面文件内容
+        desktop_content = f"""[Desktop Entry]
+Type=Application
+Name={app_name}
+Exec={launch_cmd}
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Comment=TodoList应用
+"""
+
+        with open(desktop_file, 'w', encoding='utf-8') as f:
+            f.write(desktop_content)
+
+        # 设置可执行权限
+        desktop_file.chmod(0o755)
+
+        print(f"Linux开机自启动已启用: {desktop_file}")
+        return True
+
+    except Exception as e:
+        print(f"Linux启用自启动失败: {e}")
+        return False
+
+def disable_linux_auto_start(app_name) -> bool:
+    """Linux平台禁用自启动"""
+    try:
+        # 删除.desktop文件
+        autostart_dir = Path.home() / '.config' / 'autostart'
+        desktop_file = autostart_dir / f"{app_name}.desktop"
+
+        if desktop_file.exists():
+            desktop_file.unlink()
+
+        print("Linux开机自启动已禁用")
+        return True
+
+    except Exception as e:
+        print(f"Linux禁用自启动失败: {e}")
+        return False
 
 class LinuxService(PlatformService):
     def shortcut_handler(self, shortcut, handler):
@@ -27,8 +87,6 @@ class LinuxService(PlatformService):
 
     def get_log_directory(self):
         """返回可写的日志目录的统一接口"""
-        import os
-        from pathlib import Path
         # Linux (包括 AppImage)
         # 检测是否为 AppImage 环境
         is_appimage = os.environ.get('APPIMAGE') is not None
@@ -76,7 +134,6 @@ class LinuxService(PlatformService):
 
     def start_prepare(self):
         """应用启动前准备工作的统一接口"""
-        import os
         # 【针对 Ubuntu 24.04 虚拟机的环境变量优化】
         # 必须在导入任何 GUI/Webview 组件前设置，消除无障碍总线和沙盒卡顿
         os.environ["NO_AT_BRIDGE"] = "1"
@@ -120,6 +177,35 @@ class LinuxService(PlatformService):
     def remove_firewall_rule(self, port):
         """移除防火墙策略规则的统一接口"""
         return True, "非Windows系统，无需操作防火墙"
+
+    def get_auto_start_status(self) -> Dict[str, Any]:
+        """获取自启动状态信息"""
+        return {
+            'enabled': get_config_manager().get('auto_start_enabled', False),
+            'platform': 'linux',
+            'supported': True
+        }
+
+    def set_auto_start_enabled(self, enabled):
+        print(f"设置开机自启动状态: {enabled}")
+        try:
+            # 保存配置
+            success = get_config_manager().set('auto_start_enabled', enabled)
+            if not success:
+                print("保存自启动配置失败")
+                return False
+
+            app_name = "TodoList"
+
+            # 根据状态设置或取消自启动
+            if enabled:
+                return enable_linux_auto_start(app_name)
+            else:
+                return disable_linux_auto_start(app_name)
+
+        except Exception as e:
+            print(f"设置开机自启动失败: {e}")
+            return False
 
 # 用于给工厂注册的导出变量
 ExportService = LinuxService

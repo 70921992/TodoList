@@ -800,8 +800,7 @@ class TodoApi:
     def get_auto_start_config(self):
         """获取开机自启动配置"""
         try:
-            from backend.auto_start_manager import get_auto_start_status
-            status = get_auto_start_status()
+            status = service.get_auto_start_status()
             return {
                 'success': True,
                 'config': {
@@ -819,8 +818,7 @@ class TodoApi:
     def set_auto_start_config(self, enabled):
         """设置开机自启动配置"""
         try:
-            from backend.auto_start_manager import set_auto_start_enabled
-            success = set_auto_start_enabled(enabled)
+            success = service.set_auto_start_enabled(enabled)
             if success:
                 return {
                     'success': True,
@@ -831,21 +829,6 @@ class TodoApi:
                     'success': False,
                     'error': '设置开机自启动失败'
                 }
-        except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
-    
-    def get_auto_start_status(self):
-        """获取开机自启动状态详情"""
-        try:
-            from backend.auto_start_manager import get_auto_start_status
-            status = get_auto_start_status()
-            return {
-                'success': True,
-                'status': status
-            }
         except Exception as e:
             return {
                 'success': False,

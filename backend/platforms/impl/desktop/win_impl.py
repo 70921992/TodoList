@@ -4,6 +4,8 @@ from backend.platforms.interface.service import PlatformService
 import subprocess
 import os
 from typing import Tuple
+from pathlib import Path
+from backend.config_manager import get_config_manager
 
 class FirewallManager:
     """Windows防火墙管理器：用于自动添加/删除P2P服务所需的防火墙规则"""
@@ -507,6 +509,92 @@ def is_admin() -> bool:
     except:
         return False
 
+def enable_windows_auto_start(app_name) -> bool:
+    """启用开机自启动"""
+    from backend.utils import utils
+    app_path = utils.get_app_path()
+
+    try:
+        import winreg
+
+        # 启动命令
+        launch_cmd = utils.get_launch_command()
+
+        # 注册表路径
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+
+        # 打开注册表键
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_WRITE) as key:
+            # 设置注册表值
+            winreg.SetValueEx(key, app_name, 0, winreg.REG_SZ, launch_cmd)
+
+        print(f"Windows开机自启动已启用: {launch_cmd}")
+        return True
+
+    except ImportError:
+        # 备用方案：使用启动文件夹
+        startup_folder = Path(
+            os.environ.get('APPDATA', '')) / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup'
+        startup_folder.mkdir(parents=True, exist_ok=True)
+
+        # 创建快捷方式
+        shortcut_path = startup_folder / f"{app_name}.lnk"
+
+        # 使用Python创建快捷方式
+        import pythoncom
+        from win32com.client import Dispatch
+
+        shell = Dispatch('WScript.Shell')
+        shortcut = shell.CreateShortcut(str(shortcut_path))
+        shortcut.Targetpath = app_path
+        shortcut.WorkingDirectory = str(Path(app_path).parent)
+
+        shortcut.save()
+
+        print(f"Windows启动文件夹快捷方式已创建: {shortcut_path}")
+
+        return True
+    except Exception as e:
+        print(f"启用开机自启动失败: {e}")
+        return False
+
+def disable_windows_auto_start(app_name) -> bool:
+    """禁用开机自启动"""
+    try:
+        import winreg
+
+        # 注册表路径
+        key_path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+
+        # 尝试删除注册表项
+        try:
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path, 0, winreg.KEY_WRITE) as key:
+                winreg.DeleteValue(key, app_name)
+        except FileNotFoundError:
+            # 注册表项不存在，继续检查启动文件夹
+            pass
+
+        # 删除启动文件夹中的快捷方式和批处理文件
+        startup_folder = Path(
+            os.environ.get('APPDATA', '')) / 'Microsoft' / 'Windows' / 'Start Menu' / 'Programs' / 'Startup'
+
+        # 删除快捷方式
+        shortcut_path = startup_folder / f"{app_name}.lnk"
+        if shortcut_path.exists():
+            shortcut_path.unlink()
+
+        # 删除批处理文件
+        bat_path = startup_folder / f"{app_name}.bat"
+        if bat_path.exists():
+            bat_path.unlink()
+
+        print("Windows开机自启动已禁用")
+        return True
+
+    except Exception as e:
+        print(f"Windows禁用自启动失败: {e}")
+        return False
+
 class WindowsService(PlatformService):
     def shortcut_handler(self, shortcut, handler):
         try:
@@ -533,7 +621,6 @@ class WindowsService(PlatformService):
     def get_log_directory(self):
         """返回可写的日志目录的统一接口"""
         import sys
-        from pathlib import Path
         # Windows: exe 同级目录（用户通常有写权限）
         exe_dir = Path(sys.executable).parent
         log_dir = exe_dir / 'logs'
@@ -595,13 +682,42 @@ class WindowsService(PlatformService):
     def add_firewall_rule(self, port):
         """添加防火墙策略规则的统一接口"""
         firewall_manager = FirewallManager(port=port)
-        print('-------------test')
         return firewall_manager.add_rule()
 
     def remove_firewall_rule(self, port):
         """移除防火墙策略规则的统一接口"""
         firewall_manager = FirewallManager(port=port)
         return firewall_manager.remove_rule()
+
+    def get_auto_start_status(self):
+        """获取自动重启开关状态的统一接口"""
+        return {
+            'enabled': get_config_manager().get('auto_start_enabled', False),
+            'platform': 'windows',
+            'supported': True
+        }
+
+    def set_auto_start_enabled(self, enabled):
+        """设置自动重启开关状态的统一接口"""
+        print(f"设置开机自启动状态: {enabled}")
+        try:
+            # 保存配置
+            success = get_config_manager().set('auto_start_enabled', enabled)
+            if not success:
+                print("保存自启动配置失败")
+                return False
+
+            app_name = "TodoList"
+
+            # 根据状态设置或取消自启动
+            if enabled:
+                return enable_windows_auto_start(app_name)
+            else:
+                return disable_windows_auto_start(app_name)
+
+        except Exception as e:
+            print(f"设置开机自启动失败: {e}")
+            return False
 
 # 用于给工厂注册的导出变量
 ExportService = WindowsService

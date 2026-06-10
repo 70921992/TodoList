@@ -81,3 +81,13 @@ class PlatformService(ABC):
     def remove_firewall_rule(self, port):
         """移除防火墙策略规则的统一接口"""
         pass
+
+    @abstractmethod
+    def get_auto_start_status(self):
+        """获取自动重启开关状态的统一接口"""
+        pass
+
+    @abstractmethod
+    def set_auto_start_enabled(self, enabled):
+        """设置自动重启开关状态的统一接口"""
+        pass

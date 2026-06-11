@@ -699,7 +699,7 @@ class TodoApi:
     def test_webdav_connection(self, username, password, remote_path):
         """测试WebDAV连接"""
         try:
-            from backend.webdav.webdav_client import WebDAVClient
+            from backend.features.webdav_client import WebDAVClient
             
             # 创建临时客户端进行测试
             client = WebDAVClient()

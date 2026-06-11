@@ -88,11 +88,11 @@ base_hiddenimports = [
     'backend.platforms.impl.desktop.common.system_tray',
     'backend.platforms.impl.desktop.common.task_reminder',
     'backend.reminder.impl.mobile.common.calendar_manager',
+    'backend.features.webdav_client',
     'backend.features.p2p.p2p_client',
     'backend.features.p2p.p2p_server',
     'backend.platforms.core_factory',
     'backend.platforms.interface.service',
-    'backend.webdav.webdav_client',
 ]
 
 base_exclude_modules = [

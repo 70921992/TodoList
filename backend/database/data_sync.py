@@ -11,7 +11,7 @@ from typing import Optional, Callable
 from datetime import datetime
 
 from backend.config_manager import get_webdav_config, is_webdav_enabled
-from backend.webdav.webdav_client import get_webdav_client
+from backend.features.webdav_client import get_webdav_client
 
 logger = logging.getLogger(__name__)
 

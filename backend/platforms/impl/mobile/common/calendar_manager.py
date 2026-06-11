@@ -2,9 +2,6 @@
 移动端消息日历提醒功能
 """
 
-import os
-import sys
-
 from jnius import autoclass, cast
 from datetime import datetime
 
@@ -86,17 +83,16 @@ def add_task_reminder_to_calendar(title, desc, start_time_ms):
         return f"执行失败: {str(e)}"
 
 def sync_reminder_to_calendar(sync_start_time, sync_end_time):
-    if hasattr(sys, 'getandroidapilevel') or 'ANDROID_ARGUMENT' in os.environ:
-        db = TodoDatabase()
-        result = db.get_tasks_paginated(
-            page_size=999,
-            status='uncompleted',
-            due_date_filter='sync',
-            sync_start_time= datetime.fromtimestamp(sync_start_time).date(),
-            sync_end_time= datetime.fromtimestamp(sync_end_time).date()
-        )
-        if result['tasks']:
-            print(f"添加提醒成功！事件ID: {result['tasks']}")
-            for task in result['tasks']:
-                target_time = datetime.fromisoformat(task['dueDate']).timestamp() * 1000
-                add_task_reminder_to_calendar(task['title'], task['description'], target_time)
+    db = TodoDatabase()
+    result = db.get_tasks_paginated(
+        page_size=999,
+        status='uncompleted',
+        due_date_filter='sync',
+        sync_start_time= datetime.fromtimestamp(sync_start_time).date(),
+        sync_end_time= datetime.fromtimestamp(sync_end_time).date()
+    )
+    if result['tasks']:
+        print(f"添加提醒成功！事件ID: {result['tasks']}")
+        for task in result['tasks']:
+            target_time = datetime.fromisoformat(task['dueDate']).timestamp() * 1000
+            add_task_reminder_to_calendar(task['title'], task['description'], target_time)

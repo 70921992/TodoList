@@ -6,8 +6,7 @@
 import queue
 import threading
 import time
-import sys
-import os
+import asyncio
 import platform
 from datetime import datetime
 from queue import Queue
@@ -31,10 +30,7 @@ class TaskReminder:
         self.notify_thread = None
         self.system = platform.system()
         self.notifier = None
-        self.is_android = hasattr(sys, 'getandroidapilevel') or 'ANDROID_ARGUMENT' in os.environ
-        if not self.is_android:
-            import asyncio
-            self.loop = asyncio.new_event_loop()
+        self.loop = asyncio.new_event_loop()
 
     def start(self, click_event):
         """启动提醒服务"""
@@ -168,9 +164,7 @@ class TaskReminder:
         while self.running:
             try:
                 notification_msg = self.notification_queue.get(timeout=1)
-                if not self.is_android:
-                    import asyncio
-                    asyncio.run_coroutine_threadsafe(self._show_notification(notification_msg, click_event), self.loop)
+                asyncio.run_coroutine_threadsafe(self._show_notification(notification_msg, click_event), self.loop)
             except queue.Empty:
                 pass
             except Exception as e:

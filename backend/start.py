@@ -43,7 +43,7 @@ chinese_localization = {
     'global.cancel': '取消'
 }
 
-def start_app():
+def start_app(is_android = False):
     """启动TodoList桌面应用"""
 
     def on_closing():
@@ -51,7 +51,6 @@ def start_app():
         from backend.database.operations import TodoDatabase
         settings_db = TodoDatabase()
         confirm_close = settings_db.get_setting('confirm_close', True)
-        is_android = hasattr(sys, 'getandroidapilevel') or 'ANDROID_ARGUMENT' in os.environ
         if is_android:
             backend.globals.window.confirm_close = False
         elif confirm_close:
@@ -113,7 +112,7 @@ def start_app():
         from backend.utils import utils
 
         # 创建API实例
-        api = TodoApi()
+        api = TodoApi(is_android)
         app_logger.info("TodoApi 实例创建成功")
 
         # 初始化数据同步管理器
@@ -173,6 +172,3 @@ def start_app():
             app_logger.error(f"停止自动同步服务失败: {e}")
         app_logger.info("TodoList 应用已关闭")
         app_logger.info("=" * 60)
-
-if __name__ == '__main__':
-    start_app()

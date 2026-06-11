@@ -106,10 +106,12 @@ if __name__ == '__main__':
         app_logger.info("从 main.py 启动 TodoList 应用")
         app_logger.info("=" * 60)
 
-        if hasattr(sys, 'getandroidapilevel') or 'ANDROID_ARGUMENT' in os.environ:
+        is_android = hasattr(sys, 'getandroidapilevel') or 'ANDROID_ARGUMENT' in os.environ
+
+        if is_android:
             # 启动任务提醒服务
             app_logger.info("启动任务提醒服务...")
-            start.start_app()
+            start.start_app(is_android)
         else:
             from PIL import Image
             from pystray import Icon, Menu, MenuItem

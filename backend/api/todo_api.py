@@ -25,9 +25,10 @@ service = get_platform_service()
 class TodoApi:
     """TodoList应用的API类，提供前后端通信接口"""
     
-    def __init__(self):
+    def __init__(self, is_android):
         backend_logger.info("初始化TodoApi")
         self.db = TodoDatabase()
+        self.is_android = is_android
         backend_logger.info("数据库连接成功")
         try:
             service.add_new_desktop_task_reminder()
@@ -75,7 +76,7 @@ class TodoApi:
             return {'success': False, 'error': validation_result['message']}
         
         try:
-            if task_data['dueDate'] and (hasattr(sys, 'getandroidapilevel') or 'ANDROID_ARGUMENT' in os.environ):
+            if task_data['dueDate'] and self.is_android:
                 target_time = datetime.fromisoformat(task_data['dueDate']).timestamp() * 1000
                 service.add_task_reminder_to_calendar(task_data['title'], task_data['description'], target_time)
             result = self.db.add_task(task_data)
@@ -168,7 +169,7 @@ class TodoApi:
         try:
             result = self.db.create_recurring_tasks(task_data)
             for task in result:
-                if task.get('dueDate') and (hasattr(sys, 'getandroidapilevel') or 'ANDROID_ARGUMENT' in os.environ):
+                if task.get('dueDate') and self.is_android:
                     target_time = datetime.fromisoformat(task['dueDate']).timestamp() * 1000
                     service.add_task_reminder_to_calendar(task['title'], task['description'], target_time)
             return {'success': True, 'tasks': result}
@@ -483,10 +484,8 @@ class TodoApi:
         try:
             from backend.p2p.data_manager import DataManager
             data_manager = DataManager()
-            is_android = hasattr(sys, 'getandroidapilevel') or 'ANDROID_ARGUMENT' in os.environ
-            if is_android:
-                backup = False # 在安卓设备上由于可能存在权限问题，因而不做备份操作
-            success = data_manager.import_data(data, backup=backup)
+            # 在安卓设备上由于可能存在权限问题，因而不做备份操作
+            success = data_manager.import_data(data, backup=(not self.is_android))
             if success:
                 # 导入成功后刷新前端缓存
                 self._received_data = None
@@ -561,7 +560,6 @@ class TodoApi:
     def validate_data_file(self, file_path):
         """验证数据文件路径的有效性"""
         try:
-            import os
             from pathlib import Path
             
             if not file_path or not isinstance(file_path, str):

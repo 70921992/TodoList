@@ -10,7 +10,8 @@ from pathlib import Path
 
 from backend.database.operations import TodoDatabase
 from backend.database.data_export import DataExportManager
-from backend.p2p.p2p_server import P2PServer
+from backend.features.p2p.p2p_server import P2PServer
+from backend.features.p2p.p2p_client import P2PClient
 from backend.utils.logger import backend_logger, log_frontend_message
 
 logger = logging.getLogger(__name__)
@@ -35,6 +36,7 @@ class TodoApi:
         self._received_data = None
         self._exported_data = None
         self._p2p_server = P2PServer()
+        self._p2p_client = P2PClient()
         self._data_manager = DataExportManager()
         backend_logger.info("初始化TodoApi成功")
         try:
@@ -400,9 +402,7 @@ class TodoApi:
     def p2p_scan_devices(self):
         """扫描局域网内的设备"""
         try:
-            from backend.p2p.p2p_client import P2PClient
-            client = P2PClient()
-            devices = client.scan_devices()
+            devices = self._p2p_client.scan_devices()
             return {'success': True, 'devices': devices}
         except Exception as e:
             return {'success': False, 'error': str(e)}
@@ -410,9 +410,7 @@ class TodoApi:
     def p2p_receive_data(self, ip):
         """从指定设备接收数据"""
         try:
-            from backend.p2p.p2p_client import P2PClient
-            client = P2PClient()
-            data = client.receive_data(ip)
+            data = self._p2p_client.receive_data(ip)
             if data:
                 # 存储接收到的数据供前端确认后导入
                 self._received_data = data

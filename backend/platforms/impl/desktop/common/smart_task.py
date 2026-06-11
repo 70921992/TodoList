@@ -11,13 +11,13 @@ background_color_warning = '#fff9e8'
 default_warning = '💡 输入任务内容... 使用 #标签 *分类 @时间'
 
 class SmartTaskInput:
-    def __init__(self, webview=None):
+    def __init__(self):
         self.window = None
         self.is_hide = True
         self.value = None
         self.input_element = None
         self.db = TodoDatabase()
-        self.create_window(webview)
+        self.create_window()
         self.categories = [item['name'] for item in self.db.get_all_categories()]
         self.setup_keyboard()
         self._hotkey_ref = None  # MacOS：必须持有快捷键引用的句柄，防止被 GC 垃圾回收
@@ -55,7 +55,7 @@ class SmartTaskInput:
             hint_text, color, background_color = self.generate_hint()
             self.render_warning_content(hint_text, color, background_color)
 
-    def create_window(self, webview):
+    def create_window(self):
         """创建主窗口"""
         loading_html = """
         <!DOCTYPE html>
@@ -124,7 +124,7 @@ class SmartTaskInput:
         </body>
         </html>
         """
-
+        import webview
         from backend.platforms.core.factory import get_platform_service
         service = get_platform_service()
         self.is_hide = service.is_default_hide()

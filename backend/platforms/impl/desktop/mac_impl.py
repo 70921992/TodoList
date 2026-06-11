@@ -275,10 +275,10 @@ class MacService(PlatformService):
         except Exception:
             pass
 
-    def start_keyboard(self, webview):
+    def start_keyboard(self):
         """应用启用快捷键的统一接口"""
         from backend.platforms.impl.desktop.common.smart_task import SmartTaskInput
-        SmartTaskInput(webview)
+        SmartTaskInput()
 
     def start_desktop_task_reminder(self, is_start, event=None):
         """应用桌面端消息提醒的统一接口"""
@@ -343,6 +343,12 @@ class MacService(PlatformService):
         except Exception as e:
             print(f"设置开机自启动失败: {e}")
             return False
+
+    def start_app(self):
+        """启动应用的统一接口"""
+        from backend.platforms.impl.desktop.common.system_tray import SystemTrayManager
+        manager = SystemTrayManager(self)
+        manager.start_app(False) # Mac端开启SSL存在warning告警
 
 # 用于给工厂注册的导出变量
 ExportService = MacService

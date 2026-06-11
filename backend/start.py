@@ -43,7 +43,7 @@ chinese_localization = {
     'global.cancel': '取消'
 }
 
-def start_app(is_android = False):
+def start_app(is_android = False, ssl_enable = True, start_keyboard = None):
     """启动TodoList桌面应用"""
 
     def on_closing():
@@ -151,13 +151,10 @@ def start_app(is_android = False):
         window.user_data = {'sync_manager': sync_manager}
 
         # 快捷键功能(仅在桌面端启用)
-        service.start_keyboard(webview)
+        start_keyboard()
 
     app_logger.info("启动webview...")
     try:
-        from backend.platforms.core.factory import get_platform_service
-        service = get_platform_service()
-        ssl_enable = service.is_ssl_enable()
         # 将 lazy_initialize 函数作为第一个参数传入
         # pywebview 启动窗口后会立即在后台启动一个线程执行此函数，解决Linux端窗口卡死问题
         webview.start(lazy_initialize, backend.globals.window,

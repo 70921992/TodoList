@@ -138,10 +138,10 @@ class LinuxService(PlatformService):
         # 必须在导入任何 GUI/Webview 组件前设置，消除无障碍总线和沙盒卡顿
         os.environ["NO_AT_BRIDGE"] = "1"
 
-    def start_keyboard(self, webview):
+    def start_keyboard(self):
         """应用启用快捷键的统一接口"""
         from backend.platforms.impl.desktop.common.smart_task import SmartTaskInput
-        SmartTaskInput(webview)
+        SmartTaskInput()
 
     def start_desktop_task_reminder(self, is_start, event=None):
         """应用启用快捷键的统一接口"""
@@ -206,6 +206,12 @@ class LinuxService(PlatformService):
         except Exception as e:
             print(f"设置开机自启动失败: {e}")
             return False
+
+    def start_app(self):
+        """启动应用的统一接口"""
+        from backend.platforms.impl.desktop.common.system_tray import SystemTrayManager
+        manager = SystemTrayManager(self)
+        manager.start_app(True)
 
 # 用于给工厂注册的导出变量
 ExportService = LinuxService

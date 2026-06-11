@@ -39,7 +39,7 @@ class AndroidService(PlatformService):
     def start_prepare(self):
         pass
 
-    def start_keyboard(self, webview):
+    def start_keyboard(self):
         pass
 
     def start_desktop_task_reminder(self, is_start, event=None):
@@ -82,6 +82,11 @@ class AndroidService(PlatformService):
     def set_auto_start_enabled(self, enabled):
         """设置自动重启开关状态的统一接口"""
         return False
+
+    def start_app(self):
+        """启动应用的统一接口"""
+        from backend import start
+        start.start_app(True, True, None) # 安卓端需要开启SSL，否则功能无法使用
 
 # 用于给工厂注册的导出变量
 ExportService = AndroidService

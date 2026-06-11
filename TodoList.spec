@@ -83,6 +83,7 @@ base_hiddenimports = [
     'backend.utils.logger',
     'backend.utils.utils',
     'backend.platforms.impl.desktop.common.smart_task',
+    'backend.platforms.impl.desktop.common.system_tray',
     'backend.platforms.impl.desktop.common.task_reminder',
     'backend.reminder.impl.mobile.common.calendar_manager',
     'backend.p2p.data_manager',

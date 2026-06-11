@@ -43,7 +43,7 @@ class PlatformService(ABC):
         pass
 
     @abstractmethod
-    def start_keyboard(self, webview):
+    def start_keyboard(self):
         """应用启用快捷键的统一接口"""
         pass
 
@@ -90,4 +90,9 @@ class PlatformService(ABC):
     @abstractmethod
     def set_auto_start_enabled(self, enabled):
         """设置自动重启开关状态的统一接口"""
+        pass
+
+    @abstractmethod
+    def start_app(self):
+        """启动应用的统一接口"""
         pass

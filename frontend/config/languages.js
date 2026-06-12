@@ -267,7 +267,7 @@ const Languages = {
         noDevicesFound: "未找到设备",
         receivedDataPreview: "接收到的数据预览",
         waitingForData: "等待接收数据...",
-        importWarning: "注意: 导入数据将覆盖当前所有数据，建议先备份数据！",
+        importWarning: "⚠️ 注意: 导入数据将覆盖当前所有数据，建议先备份数据！",
         confirmImport: "确认导入",
         cancelImport: "取消",
 
@@ -547,7 +547,7 @@ const Languages = {
         noDevicesFound: "No devices found",
         receivedDataPreview: "Received Data Preview",
         waitingForData: "Waiting to receive data...",
-        importWarning: "Warning: Importing will overwrite all current data. Please backup first!",
+        importWarning: "⚠️ Warning: Importing will overwrite all current data. Please backup first!",
         confirmImport: "Confirm Import",
         cancelImport: "Cancel",
 

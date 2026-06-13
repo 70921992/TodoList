@@ -532,7 +532,8 @@ class SettingsUIManager {
 
         let onTop = localStorage.getItem('todolist_windowOnTop');
         if (onTop) {
-            this.onTop = onTop === 'true';
+            this.windowTopToggle.checked = onTop === 'true';
+            this.onTop = this.windowTopToggle.checked;
             return;
         }
 
@@ -545,9 +546,12 @@ class SettingsUIManager {
 
             if (result.success) {
                 this.windowTopToggle.checked = result.enabled;
+                this.onTop = this.windowTopToggle.checked;
             }
         } catch (error) {
-            console.error('更新开机启动状态失败:', error);
+            console.error('更新窗口置顶状态失败:', error);
+            this.windowTopToggle.checked = false;
+            this.onTop = this.windowTopToggle.checked;
         }
     }
 
@@ -575,7 +579,8 @@ class SettingsUIManager {
                 this.smartKeyShow.textContent = result.config;
             }
         } catch (error) {
-            console.error('更新开机启动状态失败:', error);
+            console.error('更新快捷键配置失败:', error);
+            this.smartKeyShow.textContent = '<ctrl>+<space>';
         }
     }
 

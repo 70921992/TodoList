@@ -25,6 +25,8 @@ class TodoManager {
         // 标签相关
         this.availableTags = [];
         this.selectedTags = [];
+        this.showMoreTags = false;
+        this.defaultShowTags = 6;
         // 统计维度
         this.statsDimension = 'all'; // all, year, month, week, day
         // 日期范围缓存
@@ -263,6 +265,12 @@ class TodoManager {
                 this.clearTimeInput();
                 this.addInputValueListeners();
             });
+        }
+
+        // 展示更多/更少标签
+        const showMoreTags = document.getElementById('show-tags');
+        if (showMoreTags) {
+            showMoreTags.addEventListener('click', () => this.toggleMoreTags());
         }
     }
     
@@ -2446,8 +2454,8 @@ class TodoManager {
         try {
             const response = await window.pywebview.api.get_all_tags();
             if (response.success) {
-                const allTags = response.tags;
-                this.renderTagsModule(allTags, []);
+                this.availableTags = response.tags;
+                this.renderTagsModule([]);
             }
         } catch (error) {
             console.error('加载标签失败:', error);
@@ -2455,9 +2463,9 @@ class TodoManager {
     }
 
     // 渲染标签管理模块
-    renderTagsModule(allTags, selectedTagIds) {
+    renderTagsModule(selectedTagIds) {
         const tagsSection = document.getElementById('tags-section');
-        if (allTags.length <= 0) {
+        if (this.availableTags.length <= 0) {
             tagsSection.style.display = 'none';
             return;
         }
@@ -2471,7 +2479,17 @@ class TodoManager {
         let selectedTags = [];
 
         // 渲染现有标签
-        allTags.forEach(tag => {
+        this.availableTags.forEach((tag, index) => {
+            const showMoreTags = document.getElementById('show-more-tags');
+            const showLessTags = document.getElementById('show-less-tags');
+            if (!this.showMoreTags && index >= this.defaultShowTags) {
+                // 在判断条件是不展开全部标签情况下，超过限定数量的标签不展示
+                showMoreTags.style.display = 'none';
+                showLessTags.style.display = 'block';
+                return;
+            }
+            showMoreTags.style.display = 'block';
+            showLessTags.style.display = 'none';
             const isSelected = selectedTagIds.includes(tag.id);
             const count = tag.taskCount || 0;
 
@@ -2497,11 +2515,11 @@ class TodoManager {
             this.searchQuery = selectedTags.join(';');
             this.loadTasks();
         }
-        this.bindTagModuleEvents(tagsList, allTags, selectedTagIds);
+        this.bindTagModuleEvents(tagsList, selectedTagIds);
     }
 
     // 标签管理模块绑定事件
-    bindTagModuleEvents(tagsList, allTags, selectedTagIds) {
+    bindTagModuleEvents(tagsList, selectedTagIds) {
         tagsList.querySelectorAll('.tag-module-item').forEach(item => {
             item.onclick = (e) => {
                 const tagId = item.dataset.tagId;
@@ -2511,9 +2529,24 @@ class TodoManager {
                 } else {
                     selectedTagIds.splice(index, 1);
                 }
-                this.renderTagsModule(allTags, selectedTagIds);
+                this.renderTagsModule(selectedTagIds);
             };
         });
+    }
+
+    toggleMoreTags(){
+        const showMoreTags = document.getElementById('show-more-tags');
+        const showLessTags = document.getElementById('show-less-tags');
+        if (this.showMoreTags) {
+            this.showMoreTags = false;
+            showMoreTags.style.display = 'block';
+            showLessTags.style.display = 'none';
+        } else {
+            this.showMoreTags = true;
+            showMoreTags.style.display = 'none';
+            showLessTags.style.display = 'block';
+        }
+        this.loadTagsModule();
     }
 }
 

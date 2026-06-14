@@ -477,11 +477,23 @@ input:checked + .slider:before {
     font-size: var(--font-size-lg);
 }
 
-/* 分类部分 */
+/* 分类和标签部分 */
 .categories-section, .tags-section {
     flex: 1;
     padding: var(--spacing-lg);
     border-top: 1px solid var(--border-color);
+}
+
+#show-tags {
+    color: var(--primary-color);
+    display: inline-flex;  /* 保持行内显示，同时启用 Flex 布局 */
+    align-items: center;   /* 核心：让子元素（SVG和文字）垂直居中 */
+    gap: 4px;              /* 可选：设置图标与文字之间的间距 */
+    vertical-align: middle;/* 确保整个 #show-tags 与右侧的 .tags-list 对齐 */
+}
+
+svg {
+    display: block; /* 消除 SVG 作为行内元素的默认底边距坑 */
 }
 
 .categories-section .categories-section-header {

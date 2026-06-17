@@ -3,7 +3,7 @@ TodoList应用的数据库操作
 """
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import sqlite3
 import os
@@ -307,16 +307,22 @@ class TodoDatabase:
                 where_clauses.append('date(due_date) = ?')
                 params.append(tomorrow.isoformat())
             elif due_date_filter == 'week':
-                week_end = today.replace(day=today.day + 7) if today.day <= 21 else today.replace(day=28)
+                week_start = today - timedelta(days=today.weekday())
+                week_end = today.replace(day=week_start.day + 7) if today.day <= 21 else today.replace(day=28)
                 where_clauses.append('due_date IS NOT NULL')
                 where_clauses.append('date(due_date) BETWEEN ? AND ?')
-                params.append(today.isoformat())
+                params.append(week_start.isoformat())
                 params.append(week_end.isoformat())
             elif due_date_filter == 'month':
-                month_end = today.replace(day=28)  # 简化处理，取月末大致日期
+                month_start = today.replace(month=today.month, day=1)
+                if today.month == 12:
+                    next_month = today.replace(year=today.year + 1, month=1, day=1)
+                else:
+                    next_month = month_start.replace(month=month_start.month + 1)
+                month_end = next_month - timedelta(days=1)
                 where_clauses.append('due_date IS NOT NULL')
                 where_clauses.append('date(due_date) BETWEEN ? AND ?')
-                params.append(today.isoformat())
+                params.append(month_start.isoformat())
                 params.append(month_end.isoformat())
             elif due_date_filter == 'sync': # 仅同步
                 where_clauses.append('due_date IS NOT NULL')

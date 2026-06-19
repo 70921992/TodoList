@@ -180,3 +180,50 @@ class User:
         if data.get('lastActiveAt'):
             user.last_active_at = datetime.fromisoformat(data['lastActiveAt'])
         return user
+
+
+class UserSession:
+    """用户会话模型"""
+
+    def __init__(self, token, user_id, created_at=None, last_used_at=None):
+        self.token = token
+        self.user_id = user_id
+        self.created_at = created_at or datetime.now()
+        self.last_used_at = last_used_at or datetime.now()
+
+    def to_dict(self):
+        """转换为字典格式"""
+        return {
+            'token': self.token,
+            'userId': self.user_id,
+            'createdAt': self.created_at.isoformat() if self.created_at else None,
+            'lastUsedAt': self.last_used_at.isoformat() if self.last_used_at else None
+        }
+
+
+class TaskAuditLog:
+    """任务审计日志模型"""
+
+    def __init__(self, id=None, task_id='', user_id='', action='',
+                 field=None, old_value=None, new_value=None, created_at=None):
+        self.id = id or str(uuid.uuid4())
+        self.task_id = task_id
+        self.user_id = user_id
+        self.action = action  # create/update/complete/delete/restore
+        self.field = field
+        self.old_value = old_value
+        self.new_value = new_value
+        self.created_at = created_at or datetime.now()
+
+    def to_dict(self):
+        """转换为字典格式"""
+        return {
+            'id': self.id,
+            'taskId': self.task_id,
+            'userId': self.user_id,
+            'action': self.action,
+            'field': self.field,
+            'oldValue': self.old_value,
+            'newValue': self.new_value,
+            'createdAt': self.created_at.isoformat() if self.created_at else None
+        }

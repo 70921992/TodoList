@@ -3,11 +3,13 @@ TodoList应用的数据库操作
 """
 
 import json
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 import sqlite3
 import os
 import sys
+import uuid
 
 from backend.config import ANDROID_PACKAGE_NAME, ANDROID_PRIMARY_DATA_DIR
 from backend.utils.logger import backend_logger
@@ -146,9 +148,15 @@ class TodoDatabase:
         backend_logger.info(f"数据库路径: {self.db_path}")
         self.init_database()
 
+    @contextmanager
     def get_connection(self):
-        """获取数据库连接"""
-        return sqlite3.connect(self.db_path)
+        """获取数据库连接（context manager）"""
+        conn = sqlite3.connect(self.db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            yield conn
+        finally:
+            conn.close()
     
     def init_database(self):
         """初始化数据库表"""
@@ -1007,3 +1015,40 @@ class TodoDatabase:
         conn.commit()
         conn.close()
         return True
+
+
+class UserManager:
+    """用户管理：增删改查 + session 管理"""
+
+    def __init__(self, db: 'TodoDatabase'):
+        self.db = db
+
+    def create_user(self, display_name, unit=None, department=None,
+                    role=None, avatar_color='#4f46e5') -> 'User':
+        """创建用户。三元组重复时抛 ValueError。"""
+        from backend.database.models import User
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            # 三元组唯一性校验
+            cur.execute('''
+                SELECT id FROM users
+                WHERE unit IS ? AND department IS ? AND display_name = ?
+                AND is_deleted = 0
+            ''', (unit, department, display_name))
+            if cur.fetchone():
+                raise ValueError(f'该用户名+单位+部门组合已存在: {display_name}')
+
+            now = datetime.now().isoformat()
+            new_id = str(uuid.uuid4())
+            cur.execute('''
+                INSERT INTO users (id, display_name, unit, department, role,
+                                   avatar_color, created_at, is_deleted)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+            ''', (new_id, display_name, unit, department, role, avatar_color, now))
+            conn.commit()
+
+        return User(
+            id=new_id, display_name=display_name, unit=unit,
+            department=department, role=role, avatar_color=avatar_color,
+            created_at=datetime.fromisoformat(now)
+        )

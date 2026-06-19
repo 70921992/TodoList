@@ -131,3 +131,52 @@ class Tag:
         if 'createdAt' in data:
             tag.created_at = datetime.fromisoformat(data['createdAt'])
         return tag
+
+
+class User:
+    """用户数据模型"""
+
+    def __init__(self, id=None, display_name='', unit=None, department=None,
+                 role=None, avatar_color='#4f46e5', created_at=None,
+                 last_active_at=None, is_deleted=False):
+        self.id = id or str(uuid.uuid4())
+        self.display_name = display_name
+        self.unit = unit
+        self.department = department
+        self.role = role
+        self.avatar_color = avatar_color
+        self.created_at = created_at or datetime.now()
+        self.last_active_at = last_active_at
+        self.is_deleted = is_deleted
+
+    def to_dict(self):
+        """转换为字典格式"""
+        return {
+            'id': self.id,
+            'displayName': self.display_name,
+            'unit': self.unit,
+            'department': self.department,
+            'role': self.role,
+            'avatarColor': self.avatar_color,
+            'createdAt': self.created_at.isoformat() if self.created_at else None,
+            'lastActiveAt': self.last_active_at.isoformat() if self.last_active_at else None,
+            'isDeleted': self.is_deleted
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        """从字典创建User实例"""
+        user = cls(
+            id=data.get('id'),
+            display_name=data.get('displayName', ''),
+            unit=data.get('unit'),
+            department=data.get('department'),
+            role=data.get('role'),
+            avatar_color=data.get('avatarColor', '#4f46e5'),
+            is_deleted=bool(data.get('isDeleted', False))
+        )
+        if data.get('createdAt'):
+            user.created_at = datetime.fromisoformat(data['createdAt'])
+        if data.get('lastActiveAt'):
+            user.last_active_at = datetime.fromisoformat(data['lastActiveAt'])
+        return user

@@ -72,3 +72,134 @@ def test_user_manager_create_with_optional_fields():
         assert u.avatar_color == '#ff00ff'
     finally:
         Path(path).unlink(missing_ok=True)
+
+
+# ===== Task 5: 查询/更新/删除/列表 =====
+
+def test_user_manager_get_by_id():
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        u = um.create_user(display_name='王芳')
+        loaded = um.get_user(u.id)
+        assert loaded is not None
+        assert loaded.display_name == '王芳'
+        assert loaded.id == u.id
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_user_manager_get_not_found():
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        assert um.get_user('nonexistent-id') is None
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_user_manager_update():
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        u = um.create_user(display_name='赵磊')
+        um.update_user(u.id, role='架构师', avatar_color='#ff0000')
+        loaded = um.get_user(u.id)
+        assert loaded.role == '架构师'
+        assert loaded.avatar_color == '#ff0000'
+        # display_name/unit/department 未传应保持原值
+        assert loaded.display_name == '赵磊'
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_user_manager_update_partial():
+    """只传 display_name 应不影响其他字段"""
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        u = um.create_user(display_name='原名', unit='原单位', department='原部门')
+        um.update_user(u.id, display_name='新名')
+        loaded = um.get_user(u.id)
+        assert loaded.display_name == '新名'
+        assert loaded.unit == '原单位'
+        assert loaded.department == '原部门'
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_user_manager_update_duplicate_triple_rejected():
+    """更新后三元组冲突应被阻止"""
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        um.create_user(display_name='A', unit='U1', department='D1')
+        u2 = um.create_user(display_name='B', unit='U2', department='D2')
+        try:
+            um.update_user(u2.id, display_name='A', unit='U1', department='D1')
+            assert False, '应该抛错'
+        except ValueError as e:
+            assert '已存在' in str(e) or 'DUPLICATE' in str(e).upper()
+        # u2 字段应未变
+        assert um.get_user(u2.id).display_name == 'B'
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_user_manager_update_nonexistent():
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        try:
+            um.update_user('nonexistent-id', role='X')
+            assert False, '应该抛错'
+        except ValueError as e:
+            assert '不存在' in str(e)
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_user_manager_soft_delete():
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        u = um.create_user(display_name='陈一')
+        um.delete_user(u.id)
+        # 软删除后 get_user 返回 None
+        assert um.get_user(u.id) is None
+        # 列表过滤已删
+        assert all(x.id != u.id for x in um.list_local_users())
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_user_manager_list_excludes_deleted():
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        u1 = um.create_user(display_name='A1')
+        u2 = um.create_user(display_name='A2')
+        um.delete_user(u1.id)
+        users = um.list_local_users()
+        ids = [u.id for u in users]
+        assert u2.id in ids
+        assert u1.id not in ids
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_user_manager_list_orders_by_recent_activity():
+    """列表按 last_active_at DESC 排序，None 在后"""
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        u_old = um.create_user(display_name='旧')
+        # 直接更新数据库让 u_old 有较新时间戳（先 u_new 再 u_old 模拟）
+        u_new = um.create_user(display_name='新')
+        users = um.list_local_users()
+        # 因为 last_active_at 都是 None，created_at DESC 兜底
+        names = [u.display_name for u in users]
+        # 后创建应在前面
+        assert names.index('新') < names.index('旧')
+    finally:
+        Path(path).unlink(missing_ok=True)

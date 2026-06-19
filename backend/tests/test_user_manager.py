@@ -295,3 +295,112 @@ def test_session_get_current_token_empty():
         assert um.get_current_token() is None
     finally:
         Path(path).unlink(missing_ok=True)
+
+
+# ===== Task 7: 任务审计日志写入 =====
+
+def test_audit_log_create():
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        u = um.create_user(display_name='审计测试')
+        db.set_current_user(u.id)
+        t_dict = db.add_task({
+            'title': '任务1',
+            'currentUserId': u.id,
+        })
+        task_id = t_dict['id']
+        logs = db.get_task_audit_log(task_id)
+        assert len(logs) == 1
+        assert logs[0].action == 'create'
+        assert logs[0].user_id == u.id
+        assert logs[0].field is None
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_audit_log_update_field_level():
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        u = um.create_user(display_name='审计字段')
+        db.set_current_user(u.id)
+        t_dict = db.add_task({
+            'title': '原标题',
+            'currentUserId': u.id,
+        })
+        task_id = t_dict['id']
+        db.update_task(task_id, {
+            'title': '新标题',
+            'currentUserId': u.id,
+        })
+        logs = db.get_task_audit_log(task_id)
+        actions = [l.action for l in logs]
+        assert 'create' in actions
+        assert 'update' in actions
+        update_log = next(l for l in logs if l.action == 'update')
+        assert update_log.field == 'title'
+        assert update_log.old_value == '原标题'
+        assert update_log.new_value == '新标题'
+        assert update_log.user_id == u.id
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_audit_log_skipped_when_disabled():
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        u = um.create_user(display_name='审计关闭')
+        db.set_current_user(u.id)
+        t_dict = db.add_task({
+            'title': '任务',
+            'auditEnabled': False,
+            'currentUserId': u.id,
+        })
+        task_id = t_dict['id']
+        logs = db.get_task_audit_log(task_id)
+        assert logs == []
+        # 启用后才有审计
+        db.update_task(task_id, {
+            'title': '改',
+            'auditEnabled': True,
+            'currentUserId': u.id,
+        })
+        logs = db.get_task_audit_log(task_id)
+        assert any(l.action == 'update' for l in logs)
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_audit_log_no_current_user_is_silent():
+    """未设置 current_user 时不抛错、不写审计"""
+    db, path = _fresh_db()
+    try:
+        t_dict = db.add_task({'title': '无主任务'})
+        task_id = t_dict['id']
+        logs = db.get_task_audit_log(task_id)
+        assert logs == []
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def test_audit_log_delete():
+    db, path = _fresh_db()
+    try:
+        um = UserManager(db)
+        u = um.create_user(display_name='删除审计')
+        db.set_current_user(u.id)
+        t_dict = db.add_task({
+            'title': '将被删',
+            'currentUserId': u.id,
+        })
+        task_id = t_dict['id']
+        db.delete_task(task_id, current_user_id=u.id)
+        # 删除后任务已无，但删除动作的审计也保留
+        logs = db.get_task_audit_log(task_id)
+        actions = [l.action for l in logs]
+        assert 'create' in actions
+        assert 'delete' in actions
+    finally:
+        Path(path).unlink(missing_ok=True)

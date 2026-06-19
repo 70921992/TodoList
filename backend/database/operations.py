@@ -1052,3 +1052,99 @@ class UserManager:
             department=department, role=role, avatar_color=avatar_color,
             created_at=datetime.fromisoformat(now)
         )
+
+    def get_user(self, user_id) -> 'User | None':
+        """按 ID 获取用户（已软删除返回 None）"""
+        from backend.database.models import User
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute(
+                'SELECT * FROM users WHERE id = ? AND is_deleted = 0',
+                (user_id,)
+            )
+            row = cur.fetchone()
+        if not row:
+            return None
+        return User(
+            id=row['id'],
+            display_name=row['display_name'],
+            unit=row['unit'],
+            department=row['department'],
+            role=row['role'],
+            avatar_color=row['avatar_color'] or '#4f46e5',
+            created_at=datetime.fromisoformat(row['created_at']) if row['created_at'] else None,
+            last_active_at=datetime.fromisoformat(row['last_active_at']) if row['last_active_at'] else None,
+        )
+
+    def update_user(self, user_id, display_name=None, unit=None, department=None,
+                    role=None, avatar_color=None) -> 'User':
+        """更新用户字段。三元组冲突时抛 ValueError。"""
+        existing = self.get_user(user_id)
+        if not existing:
+            raise ValueError(f'用户不存在: {user_id}')
+
+        new_dn = display_name if display_name is not None else existing.display_name
+        new_unit = unit if unit is not None else existing.unit
+        new_dept = department if department is not None else existing.department
+        new_role = role if role is not None else existing.role
+        new_color = avatar_color if avatar_color is not None else existing.avatar_color
+
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            # 三元组唯一性校验
+            cur.execute('''
+                SELECT id FROM users
+                WHERE unit IS ? AND department IS ? AND display_name = ?
+                AND is_deleted = 0 AND id != ?
+            ''', (new_unit, new_dept, new_dn, user_id))
+            if cur.fetchone():
+                raise ValueError(f'该用户名+单位+部门组合已存在: {new_dn}')
+
+            cur.execute('''
+                UPDATE users SET display_name=?, unit=?, department=?, role=?, avatar_color=?
+                WHERE id=?
+            ''', (new_dn, new_unit, new_dept, new_role, new_color, user_id))
+            conn.commit()
+
+        return self.get_user(user_id)
+
+    def delete_user(self, user_id):
+        """软删除用户。同时将该用户拥有的任务 owner_user_id 置 NULL，
+        并从所有任务的 cooperator_user_ids JSON 中移除。"""
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('UPDATE users SET is_deleted = 1 WHERE id = ?', (user_id,))
+            # 该用户拥有的任务 owner_user_id 置 NULL
+            cur.execute(
+                'UPDATE tasks SET owner_user_id = NULL WHERE owner_user_id = ?',
+                (user_id,)
+            )
+            # 从协办人 JSON 中移除该用户
+            cur.execute(
+                "SELECT id, cooperator_user_ids FROM tasks WHERE cooperator_user_ids LIKE ?",
+                (f'%{user_id}%',)
+            )
+            for row in cur.fetchall():
+                try:
+                    ids = json.loads(row['cooperator_user_ids'] or '[]')
+                except (json.JSONDecodeError, TypeError):
+                    ids = []
+                if user_id in ids:
+                    ids.remove(user_id)
+                    cur.execute(
+                        'UPDATE tasks SET cooperator_user_ids = ? WHERE id = ?',
+                        (json.dumps(ids), row['id'])
+                    )
+            conn.commit()
+
+    def list_local_users(self) -> list['User']:
+        """列出本机所有未删除用户。
+        排序：last_active_at DESC（NULL 在后），created_at DESC 兜底。"""
+        with self.db.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT * FROM users WHERE is_deleted = 0
+                ORDER BY (last_active_at IS NULL), last_active_at DESC, created_at DESC
+            ''')
+            rows = cur.fetchall()
+        return [self.get_user(row['id']) for row in rows]

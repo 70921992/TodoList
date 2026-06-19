@@ -142,10 +142,12 @@ class TodoDatabase:
 
         # 确保父目录存在
         db_file.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # 数据库文件路径
         self.db_path = str(db_file) if isinstance(db_file, Path) else db_file
         backend_logger.info(f"数据库路径: {self.db_path}")
+        # 当前操作用户（用于审计日志）
+        self._current_user_id = None
         self.init_database()
 
     @contextmanager
@@ -157,6 +159,56 @@ class TodoDatabase:
             yield conn
         finally:
             conn.close()
+
+    # ===== A 阶段：当前用户 / 审计日志 =====
+
+    def set_current_user(self, user_id):
+        """设置当前操作用户（用于审计日志关联）"""
+        self._current_user_id = user_id
+
+    def _write_audit(self, conn, task_id, action, field=None, old=None, new=None):
+        """内部：写审计日志（仅当 audit_enabled=1 且 current_user_id 已设置）。
+        需要在 INSERT/UPDATE 已完成、conn 尚未 commit 的上下文中调用。
+        """
+        if not self._current_user_id:
+            return
+        cursor = conn.cursor()
+        cursor.execute(
+            'SELECT audit_enabled FROM tasks WHERE id = ?',
+            (task_id,)
+        )
+        row = cursor.fetchone()
+        if not row or not row[0]:
+            return
+        cursor.execute('''
+            INSERT INTO task_audit_log
+                (id, task_id, user_id, action, field, old_value, new_value, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            str(uuid.uuid4()), task_id, self._current_user_id,
+            action, field, old, new, datetime.now().isoformat()
+        ))
+
+    def get_task_audit_log(self, task_id) -> list['TaskAuditLog']:
+        """获取任务的全部审计日志（按时间倒序）。"""
+        from backend.database.models import TaskAuditLog
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute('''
+                SELECT * FROM task_audit_log
+                WHERE task_id = ?
+                ORDER BY created_at DESC
+            ''', (task_id,))
+            rows = cur.fetchall()
+        return [
+            TaskAuditLog(
+                id=row['id'], task_id=row['task_id'], user_id=row['user_id'],
+                action=row['action'], field=row['field'],
+                old_value=row['old_value'], new_value=row['new_value'],
+                created_at=datetime.fromisoformat(row['created_at']) if row['created_at'] else None
+            )
+            for row in rows
+        ]
     
     def init_database(self):
         """初始化数据库表"""
@@ -211,7 +263,15 @@ class TodoDatabase:
 
     # 任务相关操作
     def add_task(self, task_data):
-        """添加新任务"""
+        """添加新任务。
+        task_data 支持 A 阶段扩展字段：
+        - auditEnabled (bool, 默认 True)
+        - owningDeptId (str)
+        - cooperatingDeptIds (list[str] | str)
+        - ownerUserId (str) — 默认回退到 currentUserId
+        - cooperatorUserIds (list[str] | str)
+        - currentUserId (str) — 用于审计日志关联用户
+        """
         task = Task(
             title=task_data.get('title', ''),
             description=task_data.get('description', ''),
@@ -225,26 +285,47 @@ class TodoDatabase:
             recurrence_count=task_data.get('recurrenceCount'),
             parent_task_id=task_data.get('parentTaskId')
         )
-        
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
 
-        cursor.execute('''
-            INSERT INTO tasks (id, title, description, completed, priority, 
-                              category_id, due_date, is_recurring, recurrence_type, 
-                              recurrence_interval, recurrence_count, parent_task_id, 
-                              created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            task.id, task.title, task.description, task.completed, task.priority,
-            task.category_id, task.due_date.isoformat() if task.due_date else None,
-            task.is_recurring, task.recurrence_type, task.recurrence_interval,
-            task.recurrence_count, task.parent_task_id,
-            task.created_at.isoformat(), task.updated_at.isoformat()
-        ))
-        
-        conn.commit()
-        conn.close()
+        audit_enabled = 1 if task_data.get('auditEnabled', True) else 0
+        owning_dept_id = task_data.get('owningDeptId')
+        cooperating_dept_ids = json.dumps(task_data.get('cooperatingDeptIds') or [])
+        owner_user_id = task_data.get('ownerUserId') or task_data.get('currentUserId')
+        cooperator_user_ids = json.dumps(task_data.get('cooperatorUserIds') or [])
+
+        # 本次操作关联用户（优先 currentUserId，否则 owner_user_id）
+        operator_id = task_data.get('currentUserId') or self._current_user_id
+        if operator_id:
+            self._current_user_id = operator_id
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+                INSERT INTO tasks (id, title, description, completed, priority,
+                                  category_id, due_date, is_recurring, recurrence_type,
+                                  recurrence_interval, recurrence_count, parent_task_id,
+                                  created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                task.id, task.title, task.description, task.completed, task.priority,
+                task.category_id, task.due_date.isoformat() if task.due_date else None,
+                task.is_recurring, task.recurrence_type, task.recurrence_interval,
+                task.recurrence_count, task.parent_task_id,
+                task.created_at.isoformat(), task.updated_at.isoformat()
+            ))
+
+            # A 阶段扩展字段
+            cursor.execute('''
+                UPDATE tasks SET audit_enabled = ?, owning_dept_id = ?,
+                                 cooperating_dept_ids = ?, owner_user_id = ?,
+                                 cooperator_user_ids = ?
+                WHERE id = ?
+            ''', (audit_enabled, owning_dept_id, cooperating_dept_ids,
+                  owner_user_id, cooperator_user_ids, task.id))
+
+            # 写 create 审计
+            self._write_audit(conn, task.id, 'create')
+
+            conn.commit()
 
         # 处理标签
         tags = task_data.get('tags', [])
@@ -585,7 +666,9 @@ class TodoDatabase:
         return task.to_dict()
     
     def update_task(self, task_id, task_data, is_update_task_tags = True):
-        """更新任务"""
+        """更新任务。
+        支持 A 阶段扩展字段（同 add_task）。写字段级审计。
+        """
         task = Task(
             title=task_data.get('title', ''),
             description=task_data.get('description', ''),
@@ -594,23 +677,69 @@ class TodoDatabase:
             category_id=task_data.get('categoryId'),
             due_date=datetime.fromisoformat(task_data['dueDate']) if task_data.get('dueDate') else None
         )
-        
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            UPDATE tasks 
-            SET title = ?, description = ?, completed = ?, priority = ?,
-                category_id = ?, due_date = ?, updated_at = ?
-            WHERE id = ?
-        ''', (
-            task.title, task.description, task.completed, task.priority,
-            task.category_id, task.due_date.isoformat() if task.due_date else None,
-            datetime.now().isoformat(), task_id
-        ))
-        
-        conn.commit()
-        conn.close()
+
+        operator_id = task_data.get('currentUserId') or self._current_user_id
+        if operator_id:
+            self._current_user_id = operator_id
+
+        # 字段映射：驼峰 task_data 键 → 蛇形 tasks 表列
+        field_pairs = [
+            ('title', 'title', task.title),
+            ('description', 'description', task.description),
+            ('completed', 'completed', task.completed),
+            ('priority', 'priority', task.priority),
+            ('categoryId', 'category_id', task.category_id),
+            ('dueDate', 'due_date', task.due_date.isoformat() if task.due_date else None),
+        ]
+        # 仅在 task_data 中显式提供的字段才参与更新
+        provided = [(src, col, val) for src, col, val in field_pairs if src in task_data]
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # 读旧值（用于字段级审计）
+            cursor.execute('SELECT * FROM tasks WHERE id = ?', (task_id,))
+            old_row = cursor.fetchone()
+            if not old_row:
+                return None
+            old_dict = dict(old_row)
+
+            # 构建 UPDATE
+            set_clauses = [f'{col} = ?' for _, col, _ in provided]
+            set_clauses.append('updated_at = ?')
+            update_values = [val for _, _, val in provided] + [datetime.now().isoformat()]
+
+            # A 阶段扩展字段
+            ext_updates = []
+            ext_values = []
+            if 'auditEnabled' in task_data:
+                ext_updates.append('audit_enabled = ?')
+                ext_values.append(1 if task_data['auditEnabled'] else 0)
+            if 'owningDeptId' in task_data:
+                ext_updates.append('owning_dept_id = ?')
+                ext_values.append(task_data['owningDeptId'])
+            if 'cooperatingDeptIds' in task_data:
+                ext_updates.append('cooperating_dept_ids = ?')
+                ext_values.append(json.dumps(task_data['cooperatingDeptIds'] or []))
+            if 'ownerUserId' in task_data:
+                ext_updates.append('owner_user_id = ?')
+                ext_values.append(task_data['ownerUserId'] or operator_id)
+            if 'cooperatorUserIds' in task_data:
+                ext_updates.append('cooperator_user_ids = ?')
+                ext_values.append(json.dumps(task_data['cooperatorUserIds'] or []))
+
+            all_set = set_clauses + ext_updates
+            cursor.execute(
+                f'UPDATE tasks SET {", ".join(all_set)} WHERE id = ?',
+                update_values + ext_values + [task_id]
+            )
+
+            # 字段级审计
+            for src, col, new_val in provided:
+                old_val = old_dict.get(col)
+                if str(old_val) != str(new_val):
+                    self._write_audit(conn, task_id, 'update', col, str(old_val), str(new_val))
+
+            conn.commit()
 
         # 处理标签
         if is_update_task_tags:
@@ -618,18 +747,22 @@ class TodoDatabase:
             self.update_task_tags(task_id, tags)
 
         return task.to_dict()
-    
-    def delete_task(self, task_id):
-        """删除任务"""
-        conn = sqlite3.connect(self.db_path)
-        cursor = conn.cursor()
-        
-        cursor.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
-        cursor.execute('DELETE FROM task_tags WHERE task_id = ?', (task_id,))
 
-        conn.commit()
-        conn.close()
-        
+    def delete_task(self, task_id, current_user_id=None):
+        """删除任务（写 delete 审计）。"""
+        if current_user_id:
+            self._current_user_id = current_user_id
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            # 在删除前写 delete 审计（删除后无法 SELECT 旧值）
+            self._write_audit(conn, task_id, 'delete')
+
+            cursor.execute('DELETE FROM tasks WHERE id = ?', (task_id,))
+            cursor.execute('DELETE FROM task_tags WHERE task_id = ?', (task_id,))
+
+            conn.commit()
+
         return {'success': True, 'deleted_id': task_id}
     
     # 分类相关操作

@@ -74,7 +74,10 @@ class TimelineManager {
                 id: task.id,          // 保留原 ID（若需生成 t1, t2 可改为 `t${index+1}`）
                 title: task.title,
                 date: date,
-                slotKey: slotKey
+                slotKey: slotKey,
+                isRecurring: task?.isRecurring,
+                parentTaskId: task?.parentTaskId,
+                dueDate: task.dueDate
             };
         }).filter(task => task !== null); // 过滤无效项
     }
@@ -320,9 +323,26 @@ class TimelineManager {
         }
     }
 
-    handleDragEnd(e) {
+    async handleDragEnd(e) {
         const draggingCard = document.querySelector('.task-card.dragging');
         if (draggingCard) draggingCard.classList.remove('dragging');
+        let currentTask = this.tasks.find(t => t.id === this.currentDragTaskId);
+        if (currentTask && (currentTask.isRecurring || currentTask.parentTaskId)) {
+            Utils.showToast(window.languageManager.getText('periodicTaskEditFailed', '周期性任务不支持编辑，请删除后重新创建'), 'warning');
+        } else {
+            const parts = currentTask.slotKey.split('-');
+            // 取结束小时（第二个数字），并补零为两位数；如是24则调整为23
+            const endHour = parts[1].padStart(2, '0') == 24 ? 23 : parts[1].padStart(2, '0');
+            // 拼接为 ISO 日期时间（本地时间，不带时区）
+            const dueDateStr = `${currentTask.date}T${endHour}:00:00`;
+            const response = await window.pywebview.api.update_todo_due_date(
+                currentTask.id,
+                dueDateStr
+            );
+            if (!response.success) {
+                Utils.showToast(response.error, 'warning');;
+            }
+        }
         this.currentDragTaskId = null;
         document.querySelectorAll('.grid-cell').forEach(cell => cell.classList.remove('drag-over'));
     }

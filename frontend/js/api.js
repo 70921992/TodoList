@@ -83,6 +83,19 @@
             const a = _api();
             if (!a) return Promise.resolve({ success: true, logs: [] });
             return a.task_get_audit_log(taskId);
+        },
+
+        // ===== E+2 阶段：字段级历史 + 贡献度 =====
+        getFieldHistory: (taskId) => {
+            const a = _api();
+            if (!a) return Promise.resolve({ success: true, taskId, fields: {} });
+            return a.task_get_field_history(taskId);
+        },
+
+        getFieldContribution: (taskId) => {
+            const a = _api();
+            if (!a) return Promise.resolve({ success: true, taskId, users: [] });
+            return a.task_get_field_contribution(taskId);
         }
     };
 

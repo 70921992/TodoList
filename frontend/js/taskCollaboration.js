@@ -241,6 +241,74 @@
         }
     }
 
+    // ===== E+2 阶段：字段级徽章（每个字段显示"上次修改者"） =====
+    async function renderFieldBadges(taskId) {
+        const container = document.getElementById('task-field-badges');
+        if (!container) return;
+        container.innerHTML = '<span class="field-badges-loading">加载中...</span>';
+        try {
+            const r = await window.userApi.getFieldHistory(taskId);
+            if (!r || !r.success || !r.fields || Object.keys(r.fields).length === 0) {
+                container.innerHTML = '<span class="field-badges-empty">暂无字段历史</span>';
+                return;
+            }
+            // 字段名 → 中文显示名（可按需扩展）
+            const fieldLabelMap = {
+                title: '标题', description: '描述', priority: '优先级',
+                dueDate: '截止时间', completed: '完成', categoryIds: '分类',
+            };
+            const items = Object.entries(r.fields).map(([field, data]) => {
+                const label = fieldLabelMap[field] || field;
+                const last = data.lastBy || {};
+                const color = COLLAB_DEFAULT_COLOR;
+                const userInitial = _initial(last.userName);
+                const title = `${last.userName || '未知'}${last.nodeId ? ' @ ' + last.nodeId : ''}\n${_fmtTime(last.at || '')}`;
+                return `<span class="field-badge" title="${_escape(title)}">
+                    <span class="field-badge-name">${_escape(label)}</span>
+                    <span class="field-badge-by">
+                        <span class="field-badge-avatar" style="background:${_gradient(color)}">${_escape(userInitial)}</span>
+                        <span class="field-badge-user">${_escape(last.userName || '未知')}</span>
+                        ${last.nodeId ? `<span class="field-badge-node">@${_escape(last.nodeId)}</span>` : ''}
+                    </span>
+                </span>`;
+            });
+            container.innerHTML = items.join('');
+        } catch (e) {
+            container.innerHTML = '<span class="field-badges-empty">加载失败</span>';
+        }
+    }
+
+    // ===== E+2 阶段：贡献度面板 =====
+    async function renderContributionPanel(taskId) {
+        const container = document.getElementById('task-contribution');
+        if (!container) return;
+        container.innerHTML = '<p class="contribution-loading">加载中...</p>';
+        try {
+            const r = await window.userApi.getFieldContribution(taskId);
+            if (!r || !r.success || !r.users || r.users.length === 0) {
+                container.innerHTML = '<p class="contribution-empty">暂无贡献度数据</p>';
+                return;
+            }
+            const total = r.users.reduce((s, u) => s + (u.fieldChangeCount || 0), 0) || 1;
+            const items = r.users.map((u) => {
+                const pct = Math.round(((u.fieldChangeCount || 0) / total) * 100);
+                const color = COLLAB_DEFAULT_COLOR;
+                const fields = (u.fields || []).map(f => f.field).join(', ');
+                return `<div class="contribution-row" title="${_escape(fields || '')}">
+                    <span class="contribution-avatar" style="background:${_gradient(color)}">${_escape(_initial(u.userName))}</span>
+                    <span class="contribution-name">${_escape(u.userName || '未知')}${u.nodeId ? ` <span class="contribution-node">@${_escape(u.nodeId)}</span>` : ''}</span>
+                    <span class="contribution-bar-wrap">
+                        <span class="contribution-bar" style="width:${pct}%; background:${_gradient(color)}"></span>
+                    </span>
+                    <span class="contribution-count">${u.fieldChangeCount || 0}</span>
+                </div>`;
+            });
+            container.innerHTML = items.join('');
+        } catch (e) {
+            container.innerHTML = '<p class="contribution-empty">加载失败</p>';
+        }
+    }
+
     // 打开任务详情模态框
     async function openTaskDetail(task) {
         const m = document.getElementById('task-detail-modal');
@@ -248,6 +316,9 @@
         m.dataset.taskId = task.id;
         m.style.display = 'flex';
         await renderTaskDetail(task);
+        // E+2 阶段：渲染字段徽章 + 贡献度面板
+        renderFieldBadges(task.id);
+        renderContributionPanel(task.id);
         // "编辑"按钮
         const editBtn = document.getElementById('task-detail-edit');
         if (editBtn) {

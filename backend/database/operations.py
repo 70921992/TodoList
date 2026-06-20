@@ -118,10 +118,18 @@ def _migrate_database(cursor):
                 field TEXT,
                 old_value TEXT,
                 new_value TEXT,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                by_node TEXT
             )
         ''')
         cursor.execute('CREATE INDEX idx_audit_task ON task_audit_log(task_id, created_at)')
+    else:
+        # E+2 阶段：审计表加 by_node 列（sync 场景下记录远端节点 ID）
+        cursor.execute("PRAGMA table_info(task_audit_log)")
+        audit_cols = [column[1] for column in cursor.fetchall()]
+        if 'by_node' not in audit_cols:
+            cursor.execute('ALTER TABLE task_audit_log ADD COLUMN by_node TEXT')
+            cursor.execute('CREATE INDEX IF NOT EXISTS idx_audit_by_node ON task_audit_log(task_id, by_node)')
 
     # tasks 扩展字段（注意：函数顶部已经读过 columns，但要确保在最末尾再读一次最新值）
     cursor.execute("PRAGMA table_info(tasks)")
@@ -331,9 +339,10 @@ class TodoDatabase:
         """设置当前操作用户（用于审计日志关联）"""
         self._current_user_id = user_id
 
-    def _write_audit(self, conn, task_id, action, field=None, old=None, new=None):
+    def _write_audit(self, conn, task_id, action, field=None, old=None, new=None, by_node=None):
         """内部：写审计日志（仅当 audit_enabled=1 且 current_user_id 已设置）。
         需要在 INSERT/UPDATE 已完成、conn 尚未 commit 的上下文中调用。
+        E+2 阶段：by_node 记录节点 ID（sync 场景下为远端节点）。
         """
         if not self._current_user_id:
             return
@@ -347,11 +356,11 @@ class TodoDatabase:
             return
         cursor.execute('''
             INSERT INTO task_audit_log
-                (id, task_id, user_id, action, field, old_value, new_value, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (id, task_id, user_id, action, field, old_value, new_value, created_at, by_node)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             str(uuid.uuid4()), task_id, self._current_user_id,
-            action, field, old, new, datetime.now().isoformat()
+            action, field, old, new, datetime.now().isoformat(), by_node
         ))
 
     def get_task_audit_log(self, task_id) -> list['TaskAuditLog']:
@@ -520,8 +529,8 @@ class TodoDatabase:
                   owner_user_id, cooperator_user_ids, category_ids_json,
                   json.dumps(task.field_timestamps or {}, ensure_ascii=False), task.id))
 
-            # 写 create 审计
-            self._write_audit(conn, task.id, 'create')
+            # 写 create 审计（E+2 阶段：透传 byNode，记录节点 ID）
+            self._write_audit(conn, task.id, 'create', by_node=task_data.get('byNode'))
 
             conn.commit()
 
@@ -1041,8 +1050,10 @@ class TodoDatabase:
             )
 
             # 字段级审计（必须在 cursor.execute 之后，_write_audit 会重新查 audit_enabled）
+            # E+2 阶段：by_node 透传自 task_data['byNode']（sync 场景下为远端节点）
+            audit_by_node = task_data.get('byNode')
             for src, col, old_val_s, new_val_s in changed:
-                self._write_audit(conn, task_id, 'update', col, old_val_s, new_val_s)
+                self._write_audit(conn, task_id, 'update', col, old_val_s, new_val_s, by_node=audit_by_node)
 
             conn.commit()
 

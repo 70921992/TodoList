@@ -2840,7 +2840,86 @@
     font-size: var(--font-size-sm);
 }
 
+/* ===== E+2 阶段：字段级徽章 ===== */
+.field-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0;
+}
+.field-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: var(--bg-secondary);
+    border-radius: 10px;
+    font-size: var(--font-size-xs);
+    border: 1px solid var(--border-color, #e2e8f0);
+}
+.field-badge-name {
+    color: var(--text-muted);
+    font-weight: 500;
+}
+.field-badge-by {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+.field-badge-avatar {
+    width: 16px; height: 16px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 10px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 600;
+}
+.field-badge-user { color: var(--text-primary); }
+.field-badge-node { color: var(--text-muted); font-family: monospace; }
+.field-badges-loading, .field-badges-empty {
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    padding: 4px 0;
+}
 
+/* ===== E+2 阶段：贡献度面板 ===== */
+.contribution-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px 0;
+}
+.contribution-row {
+    display: grid;
+    grid-template-columns: 28px 1fr 2fr 32px;
+    align-items: center;
+    gap: 8px;
+    font-size: var(--font-size-xs);
+}
+.contribution-avatar {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    color: #fff;
+    font-size: 11px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-weight: 600;
+}
+.contribution-name { color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.contribution-node { color: var(--text-muted); font-family: monospace; font-size: 10px; }
+.contribution-bar-wrap {
+    height: 8px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+    overflow: hidden;
+}
+.contribution-bar { display: block; height: 100%; border-radius: 4px; min-width: 4px; }
+.contribution-count { text-align: right; color: var(--text-muted); font-weight: 600; }
+.contribution-loading, .contribution-empty {
+    color: var(--text-muted);
+    font-size: var(--font-size-xs);
+    padding: 4px 0;
+    margin: 0;
+}
 .btn:disabled:hover {
     transform: none;
     box-shadow: none;

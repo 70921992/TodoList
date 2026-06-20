@@ -89,8 +89,13 @@ class SyncEngine:
         local = self.db.get_task(entity['id'])
         has_conflict = 0
         if local is None:
-            # 新增
-            self.db.add_task(entity)
+            # 新增（E+2 阶段：byNode 透传给 add_task，让审计记录远端节点）
+            entity_for_db = dict(entity)
+            entity_for_db['byNode'] = peer_id or ''
+            # 设置 current_user 让 create 审计能写入（user_id=本机 user，by_node=远端节点）
+            if user_id:
+                self.db.set_current_user(user_id)
+            self.db.add_task(entity_for_db)
             self.sync_manager.log_sync('task', entity['id'], 'push',
                                         peer_id=peer_id, user_id=user_id, has_conflict=0)
         else:
@@ -117,8 +122,11 @@ class SyncEngine:
             elif merged != local:
                 # 把 _changed_fields 透传标记为内部字段，update_task 会从 merged['fieldTimestamps'] 读取
                 merged_for_db = dict(merged)
-                # operator = peer_id，让字段级 by 反映"远端节点"
-                merged_for_db['currentUserId'] = peer_id or user_id or 'remote'
+                # E+2 阶段：operator = user_id（实际操作用户），by_node = peer_id（节点）
+                # 字段级 by 仍由 resolve_field_level 在 fieldTimestamps 中算好（用 peer_id）
+                if user_id:
+                    merged_for_db['currentUserId'] = user_id
+                merged_for_db['byNode'] = peer_id or ''
                 self.db.update_task(entity['id'], merged_for_db)
                 has_conflict = 1 if (merged.get('updatedAt') or '') != (entity.get('updatedAt') or entity.get('updated_at') or '') else 0
             self.sync_manager.log_sync('task', entity['id'], 'push',

@@ -1600,3 +1600,113 @@ class TodoApi:
             }
         except Exception as e:
             return {'success': False, 'error': str(e)}
+
+    def task_get_field_history(self, task_id, history_per_field=10):
+        """E+2 阶段：按字段分组返回字段级历史。
+
+        返回结构：
+        {
+            "taskId": "...",
+            "fields": {
+                "title": {
+                    "lastBy": {"userId", "userName", "nodeId", "at"} | null,
+                    "history": [ {"at","by":{...}, "oldValue","newValue"}, ... ],
+                },
+                ...
+            }
+        }
+        """
+        try:
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute('''
+                    SELECT a.action, a.field, a.old_value, a.new_value, a.created_at,
+                           a.user_id, a.by_node, u.display_name AS user_name
+                    FROM task_audit_log a
+                    LEFT JOIN users u ON a.user_id = u.id AND u.is_deleted = 0
+                    WHERE a.task_id = ? AND a.field IS NOT NULL
+                    ORDER BY a.created_at ASC
+                ''', (task_id,))
+                rows = cur.fetchall()
+
+            # 按 field 分组
+            fields: dict = {}
+            for r in rows:
+                f = r['field']
+                if f not in fields:
+                    fields[f] = {'lastBy': None, 'history': []}
+                entry = {
+                    'at': r['created_at'],
+                    'by': {
+                        'userId': r['user_id'],
+                        'userName': r['user_name'] or '已删除用户',
+                        'nodeId': r['by_node'] or '',
+                    },
+                    'oldValue': r['old_value'],
+                    'newValue': r['new_value'],
+                }
+                fields[f]['history'].append(entry)
+                # 倒序遍历的最后一条即最新
+                last_by = dict(entry['by'])
+                last_by['at'] = entry['at']
+                fields[f]['lastBy'] = last_by
+
+            # 截断 history 到 history_per_field
+            for f, data in fields.items():
+                data['history'] = data['history'][-history_per_field:]
+
+            return {'success': True, 'taskId': task_id, 'fields': fields}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+    def task_get_field_contribution(self, task_id):
+        """E+2 阶段：返回每个用户对每个字段的改动次数（贡献度）。
+
+        返回结构：
+        {
+            "taskId": "...",
+            "users": [
+                {"userId", "userName", "nodeId", "fieldChangeCount", "fields": [field names]},
+                ...
+            ]
+        }
+        """
+        try:
+            with self.db.get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute('''
+                    SELECT a.user_id, a.by_node, a.field,
+                           u.display_name AS user_name,
+                           COUNT(*) AS change_count
+                    FROM task_audit_log a
+                    LEFT JOIN users u ON a.user_id = u.id AND u.is_deleted = 0
+                    WHERE a.task_id = ? AND a.action = 'update' AND a.field IS NOT NULL
+                    GROUP BY a.user_id, a.by_node, a.field, u.display_name
+                    ORDER BY change_count DESC
+                ''', (task_id,))
+                rows = cur.fetchall()
+
+            users_map: dict = {}
+            for r in rows:
+                key = (r['user_id'] or '', r['by_node'] or '')
+                if key not in users_map:
+                    users_map[key] = {
+                        'userId': r['user_id'] or '',
+                        'userName': r['user_name'] or '已删除用户',
+                        'nodeId': r['by_node'] or '',
+                        'fieldChangeCount': 0,
+                        'fields': [],
+                    }
+                users_map[key]['fieldChangeCount'] += r['change_count']
+                users_map[key]['fields'].append({
+                    'field': r['field'],
+                    'count': r['change_count'],
+                })
+
+            return {
+                'success': True,
+                'taskId': task_id,
+                'users': list(users_map.values()),
+            }
+        except Exception as e:
+            return {'success': False, 'error': str(e)}

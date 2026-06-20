@@ -10,11 +10,12 @@ import uuid
 
 class Task:
     """任务数据模型"""
-    
-    def __init__(self, id=None, title='', description='', completed=False, 
-                 priority='none', category_id=None, due_date=None, 
-                 is_recurring=False, recurrence_type=None, recurrence_interval=1, 
-                 recurrence_count=None, parent_task_id=None):
+
+    def __init__(self, id=None, title='', description='', completed=False,
+                 priority='none', category_id=None, due_date=None,
+                 is_recurring=False, recurrence_type=None, recurrence_interval=1,
+                 recurrence_count=None, parent_task_id=None,
+                 field_timestamps=None):
         self.id = id or str(uuid.uuid4())
         self.title = title
         self.description = description
@@ -29,7 +30,10 @@ class Task:
         self.parent_task_id = parent_task_id  # 父任务ID，用于周期性任务的子任务
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
-    
+        # E 阶段：字段级时间戳 {"title": {"at": "iso", "by": "node-x"}, ...}
+        # None → 旧库迁移；dict → 正常
+        self.field_timestamps = dict(field_timestamps) if field_timestamps else {}
+
     def to_dict(self):
         """转换为字典格式"""
         return {
@@ -46,9 +50,11 @@ class Task:
             'recurrenceCount': self.recurrence_count,
             'parentTaskId': self.parent_task_id,
             'createdAt': self.created_at.isoformat(),
-            'updatedAt': self.updated_at.isoformat()
+            'updatedAt': self.updated_at.isoformat(),
+            # E 阶段：字段级时间戳（camelCase 形式暴露给前端）
+            'fieldTimestamps': dict(self.field_timestamps or {}),
         }
-    
+
     @classmethod
     def from_dict(cls, data):
         """从字典创建Task实例"""
@@ -64,7 +70,8 @@ class Task:
             recurrence_type=data.get('recurrenceType'),
             recurrence_interval=data.get('recurrenceInterval', 1),
             recurrence_count=data.get('recurrenceCount'),
-            parent_task_id=data.get('parentTaskId')
+            parent_task_id=data.get('parentTaskId'),
+            field_timestamps=data.get('fieldTimestamps') or data.get('field_timestamps'),
         )
         if 'createdAt' in data:
             task.created_at = datetime.fromisoformat(data['createdAt'])

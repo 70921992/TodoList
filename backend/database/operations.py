@@ -40,7 +40,9 @@ def _migrate_database(cursor):
         ('recurrence_type', 'TEXT'),
         ('recurrence_interval', 'INTEGER DEFAULT 1'),
         ('recurrence_count', 'INTEGER'),
-        ('parent_task_id', 'TEXT')
+        ('parent_task_id', 'TEXT'),
+        # E 阶段：字段级时间戳（JSON 字符串）
+        ('field_timestamps', 'TEXT'),
     ]
 
     for column_name, column_def in new_columns:
@@ -506,15 +508,17 @@ class TodoDatabase:
                 task.created_at.isoformat(), task.updated_at.isoformat()
             ))
 
-            # A 阶段扩展字段
+            # A 阶段扩展字段 + E 阶段字段级时间戳
             cursor.execute('''
                 UPDATE tasks SET audit_enabled = ?, owning_dept_id = ?,
                                  cooperating_dept_ids = ?, owner_user_id = ?,
                                  cooperator_user_ids = ?,
-                                 category_ids = ?
+                                 category_ids = ?,
+                                 field_timestamps = ?
                 WHERE id = ?
             ''', (audit_enabled, owning_dept_id, cooperating_dept_ids,
-                  owner_user_id, cooperator_user_ids, category_ids_json, task.id))
+                  owner_user_id, cooperator_user_ids, category_ids_json,
+                  json.dumps(task.field_timestamps or {}, ensure_ascii=False), task.id))
 
             # 写 create 审计
             self._write_audit(conn, task.id, 'create')
@@ -836,7 +840,8 @@ class TodoDatabase:
             SELECT id, title, description, completed, priority, category_id, due_date,
                    is_recurring, recurrence_type, recurrence_interval, recurrence_count,
                    parent_task_id, created_at, updated_at,
-                   owner_user_id, cooperator_user_ids, category_ids
+                   owner_user_id, cooperator_user_ids, category_ids,
+                   field_timestamps
             FROM tasks WHERE id = ?
         ''', (task_id,))
         row = cursor.fetchone()
@@ -853,6 +858,19 @@ class TodoDatabase:
             cat_ids = json.loads(row[16] or '[]')
         except (json.JSONDecodeError, TypeError):
             cat_ids = []
+        # E 阶段：字段级时间戳
+        field_ts_raw = row[17] if len(row) > 17 else None
+        try:
+            if isinstance(field_ts_raw, str) and field_ts_raw.strip():
+                field_ts = json.loads(field_ts_raw)
+            elif isinstance(field_ts_raw, dict):
+                field_ts = dict(field_ts_raw)
+            else:
+                field_ts = {}
+        except (json.JSONDecodeError, TypeError):
+            field_ts = {}
+        if not isinstance(field_ts, dict):
+            field_ts = {}
         task_dict = {
             'id': row[0],
             'title': row[1],
@@ -871,6 +889,7 @@ class TodoDatabase:
             'ownerUserId': row[14],
             'cooperatorUserIds': coop_ids,
             'categoryIds': cat_ids,
+            'fieldTimestamps': field_ts,  # E 阶段
             'tags': self.get_task_tags(task_id)  # 添加标签信息
         }
 
@@ -979,17 +998,51 @@ class TodoDatabase:
                 ext_updates.append('category_ids = ?')
                 ext_values.append(json.dumps(raw))
 
+            # E 阶段：先计算字段级时间戳（合并旧值 + 本次真改动的字段），
+            # 但 audit 写入延后到 cursor.execute 之后（_write_audit 会重新查 audit_enabled），
+            # 否则 audit_enabled 的"先关后开"模式会被自己覆盖前的旧值误导为不写。
+            # sync 场景：resolve_field_level 已经算好权威 fieldTimestamps，透传以保留 at/by 来源。
+            explicit_field_ts = task_data.get('fieldTimestamps')
+            if isinstance(explicit_field_ts, dict):
+                field_ts = {k: v for k, v in explicit_field_ts.items() if isinstance(v, dict)}
+            else:
+                field_ts = {}
+                old_field_ts_raw = old_dict.get('field_timestamps') or '{}'
+                try:
+                    if isinstance(old_field_ts_raw, str) and old_field_ts_raw.strip():
+                        field_ts = json.loads(old_field_ts_raw)
+                    elif isinstance(old_field_ts_raw, dict):
+                        field_ts = dict(old_field_ts_raw)
+                    else:
+                        field_ts = {}
+                    if not isinstance(field_ts, dict):
+                        field_ts = {}
+                except (json.JSONDecodeError, TypeError):
+                    field_ts = {}
+            ts_author = operator_id or 'unknown'
+            # 记录真改动的字段（驼峰名 + 蛇形列名 + 旧值）。
+            # sync 场景（透传 fieldTimestamps）也按"provided 中真改动的"写 audit，
+            # 字段级时间戳已被 resolve_field_level 算好，本地不再覆盖。
+            changed = []
+            for src, col, new_val in provided:
+                old_val = old_dict.get(col)
+                if str(old_val) != str(new_val):
+                    if not isinstance(explicit_field_ts, dict):
+                        # 本地写入：自动写字段级时间戳
+                        field_ts[src] = {'at': custom_updated_at, 'by': ts_author}
+                    changed.append((src, col, str(old_val), str(new_val)))
+            set_clauses.append('field_timestamps = ?')
+            update_values.append(json.dumps(field_ts, ensure_ascii=False))
+
             all_set = set_clauses + ext_updates
             cursor.execute(
                 f'UPDATE tasks SET {", ".join(all_set)} WHERE id = ?',
                 update_values + ext_values + [task_id]
             )
 
-            # 字段级审计
-            for src, col, new_val in provided:
-                old_val = old_dict.get(col)
-                if str(old_val) != str(new_val):
-                    self._write_audit(conn, task_id, 'update', col, str(old_val), str(new_val))
+            # 字段级审计（必须在 cursor.execute 之后，_write_audit 会重新查 audit_enabled）
+            for src, col, old_val_s, new_val_s in changed:
+                self._write_audit(conn, task_id, 'update', col, old_val_s, new_val_s)
 
             conn.commit()
 

@@ -4,6 +4,7 @@ import time
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
+from backend.network.field_merge import resolve_field_level
 from backend.network.protocol import (
     SYNC_TASK_PUSH, SYNC_TASK_PULL, SYNC_CATEGORY_PUSH, SYNC_CATEGORY_PULL,
     SYNC_USER_PROFILE_PUSH,
@@ -93,18 +94,38 @@ class SyncEngine:
             self.sync_manager.log_sync('task', entity['id'], 'push',
                                         peer_id=peer_id, user_id=user_id, has_conflict=0)
         else:
-            merged = self.sync_manager.resolve_conflict(local, entity)
+            # E 阶段：字段级 LWW（替换 D 阶段实体级 resolve_conflict）。
+            # 远端 entity 可携带 _changed_fields 限定只合并指定字段；
+            # 缺省时 resolve_field_level 视作全字段（向后兼容 D 阶段节点）。
+            local_node_id = getattr(self.sync_manager, 'node_id', '') or ''
+            merged = resolve_field_level(
+                local, entity,
+                local_node_id=local_node_id,
+                remote_node_id=peer_id or user_id or '',
+            )
+            # 顶层 updatedAt：用字段最大时间戳或当前本地时间，反映"本机应用时刻"
+            field_ts = merged.get('fieldTimestamps') or {}
+            max_at = ''
+            for v in field_ts.values():
+                if isinstance(v, dict) and v.get('at'):
+                    if not max_at or str(v.get('at')) > max_at:
+                        max_at = str(v.get('at'))
+            merged['updatedAt'] = max_at or datetime.now(timezone.utc).isoformat()
             if merged.get('is_deleted') and not local.get('is_deleted'):
                 # 远端删除
                 self.db.soft_delete_task(entity['id'])
             elif merged != local:
-                self.db.update_task(entity['id'], merged)
-                has_conflict = 1 if merged.get('updated_at') != entity.get('updated_at') else 0
+                # 把 _changed_fields 透传标记为内部字段，update_task 会从 merged['fieldTimestamps'] 读取
+                merged_for_db = dict(merged)
+                # operator = peer_id，让字段级 by 反映"远端节点"
+                merged_for_db['currentUserId'] = peer_id or user_id or 'remote'
+                self.db.update_task(entity['id'], merged_for_db)
+                has_conflict = 1 if (merged.get('updatedAt') or '') != (entity.get('updatedAt') or entity.get('updated_at') or '') else 0
             self.sync_manager.log_sync('task', entity['id'], 'push',
                                         peer_id=peer_id, user_id=user_id, has_conflict=has_conflict)
         if self.on_apply:
             try:
-                self.on_apply(entity_type, entity)
+                self.on_apply('task', entity)
             except Exception:
                 pass
         return entity

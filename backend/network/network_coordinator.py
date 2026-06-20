@@ -468,10 +468,19 @@ class NetworkCoordinator:
         except Exception:
             pass
 
-    def apply_local_change(self, entity_type: str, entity: dict) -> None:
-        """本地变更：向所有在线 peer 广播。"""
+    def apply_local_change(self, entity_type: str, entity: dict,
+                            changed_fields: Optional[list] = None) -> None:
+        """本地变更：向所有在线 peer 广播。
+
+        E 阶段：可选 changed_fields（驼峰字段名列表），接收方走字段级合并；
+        不传则接收方按全字段合并（向后兼容 D 阶段节点）。
+        """
         if not self._running:
             return
+        # E 阶段：透传 _changed_fields（协议层私有键）
+        if changed_fields:
+            entity = dict(entity)
+            entity['_changed_fields'] = list(changed_fields)
         with self._lock:
             states = list(self._peers.values())
         for state in states:

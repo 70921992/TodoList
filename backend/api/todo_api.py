@@ -1490,13 +1490,19 @@ class TodoApi:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def network_broadcast_change(self, entity_type: str, entity: dict):
-        """把本地变更广播至所有在线 peer。"""
+    def network_broadcast_change(self, entity_type: str, entity: dict,
+                                   changed_fields: list = None):
+        """把本地变更广播至所有在线 peer。
+
+        E 阶段：可选 changed_fields，传入时接收方走字段级合并。
+        """
         try:
             self._ensure_d_components()
             if not self.network_coordinator.is_running():
                 return {'success': False, 'error': 'COORDINATOR_NOT_RUNNING'}
-            self.network_coordinator.apply_local_change(entity_type, entity)
+            self.network_coordinator.apply_local_change(
+                entity_type, entity, changed_fields=changed_fields,
+            )
             return {'success': True}
         except Exception as e:
             return {'success': False, 'error': str(e)}
